@@ -10,32 +10,49 @@ return new class extends Migration
      * Run the migrations.
      */
     public function up(): void
-    {
-        Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            $table->rememberToken();
-            $table->timestamps();
-        });
+{
+    Schema::create('users', function (Blueprint $table) {
+        // Match your exact primary key name
+        $table->id('user_id'); 
+        
+        // Split name architecture
+        $table->string('first_name', 100);
+        $table->string('last_name', 100);
+        $table->string('email', 150)->unique();
+        $table->timestamp('email_verified_at')->nullable(); // Required for Breeze verification flows
+        $table->string('password', 255);
+        
+        // Exact Enum configurations matching your table (with duplicate values removed)
+        $table->enum('role', ['patient', 'nurse', 'physician', 'admin'])->default('patient');
+        $table->enum('account_status', ['inactive', 'active', 'suspended'])->default('active');
+        $table->enum('online_status', ['offline', 'online'])->default('offline');
 
-        Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
-        });
+        // University / Institutional tracking fields
+        $table->string('clsu_id', 50)->nullable();
+        $table->enum('user_type', ['student', 'staff', 'faculty']);
+        $table->string('department', 100)->nullable();
+        
+        // Contact and Professional metadata
+        $table->string('contact_num', 20)->nullable();
+        $table->string('staff_position', 100)->nullable();
+        $table->string('specialization', 100)->nullable();
+        
+        // Session tracking & Timestamps
+        $table->timestamp('last_seen_at')->nullable();
+        $table->rememberToken(); // Required by Breeze for 'Remember Me' checkboxes
+        $table->timestamps();    // Automatically builds your created_at and updated_at
+    });
 
-        Schema::create('sessions', function (Blueprint $table) {
-            $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
-            $table->string('ip_address', 45)->nullable();
-            $table->text('user_agent')->nullable();
-            $table->longText('payload');
-            $table->integer('last_activity')->index();
-        });
-    }
+    // Create the 'sessions' table right below it to prevent the previous error
+    Schema::create('sessions', function (Blueprint $table) {
+        $table->string('id')->primary();
+        $table->unsignedBigInteger('user_id')->nullable()->index(); // Perfectly matches user_id bigint type
+        $table->string('ip_address', 45)->nullable();
+        $table->text('user_agent')->nullable();
+        $table->longText('payload');
+        $table->integer('last_activity')->index();
+    });
+}
 
     /**
      * Reverse the migrations.
