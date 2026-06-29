@@ -15,6 +15,10 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
+
+                    <a href="{{ route('newconsultation') }}" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition duration-150 ease-in-out">
+                        {{ __('New Consultation') }}
+                    </a>
                 </div>
             </div>
 
@@ -69,6 +73,9 @@
         <div class="pt-2 pb-3 space-y-1">
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
+            </x-responsive-nav-link>
+           <x-responsive-nav-link :href="route('newconsultation')" :active="request()->routeIs('newconsultation')">
+                {{ __('New Consultation') }}
             </x-responsive-nav-link>
         </div>
 

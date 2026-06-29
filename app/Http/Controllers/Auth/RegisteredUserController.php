@@ -32,9 +32,21 @@ class RegisteredUserController extends Controller
     {
         $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
-            'last_name'  => ['required', 'string', 'max:100'],
-            'email'      => ['required', 'string', 'lowercase', 'email', 'max:150', 'unique:'.User::class],
-            'password'   => ['required', 'confirmed', Rules\Password::defaults()],
+            'last_name' => ['required', 'string', 'max:100'],
+            'email' => [
+                'required', 
+                'string', 
+                'lowercase', 
+                'email', 
+                'max:150', 
+                'unique:'.User::class,
+                // Regex to accept either clsu.edu.ph OR clsu2.edu.ph
+                'regex:/^[a-zA-Z0-9._%+-]+@clsu2?\.edu\.ph$/i'
+            ],
+            'password' => ['required', 'confirmed', Rules\Password::defaults()],
+        ], [
+            // User-friendly error message
+            'email.regex' => 'Only official CLSU email addresses (@clsu.edu.ph or @clsu2.edu.ph) are allowed to register.',
         ]);
 
         $user = User::create([
