@@ -16,19 +16,25 @@
                                     <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Active Consultation</p>
                                     <h3 class="mt-2 text-2xl font-bold text-slate-900">{{ ucfirst($consultation->concern_category) }} Consultation</h3>
                                 </div>
-                                <span class="inline-flex items-center rounded-full bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-700">
-                                    {{ ucfirst($consultation->request_status) }}
-                                </span>
-                            </div>
-
-                            <div class="mt-6 grid gap-4 sm:grid-cols-2">
-                                <div class="rounded-2xl border border-gray-200 bg-white p-4">
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Submitted</p>
-                                    <p class="mt-2 text-sm font-semibold text-slate-900">{{ $consultation->submitted_at->format('M d, Y @ h:i A') }}</p>
-                                </div>
-                                <div class="rounded-2xl border border-gray-200 bg-white p-4">
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
-                                    <p class="mt-2 text-sm font-semibold text-slate-900">{{ ucfirst($consultation->request_status) }}</p>
+                                @php
+                                    $status = $consultation->request_status;
+                                    $statusClasses = 'inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold ';
+                                    if (in_array($status, ['rejected', 'cancelled'])) {
+                                        $statusClasses .= 'bg-red-100 text-red-700';
+                                    } elseif ($status === 'completed') {
+                                        $statusClasses .= 'bg-emerald-100 text-emerald-700';
+                                    } else {
+                                        $statusClasses .= 'bg-slate-100 text-slate-700';
+                                    }
+                                @endphp
+                                <div class="flex flex-col gap-3 sm:items-end sm:w-80">
+                                    <span class="{{ $statusClasses }}">
+                                        {{ ucfirst($status) }}
+                                    </span>
+                                    <div class="rounded-2xl border border-gray-200 bg-white px-5 py-4 text-right shadow-sm">
+                                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Submitted</p>
+                                        <p class="mt-2 text-sm font-semibold text-slate-900">{{ $consultation->submitted_at->format('M d, Y @ h:i A') }}</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -52,6 +58,11 @@
                                     <p class="text-sm text-slate-500">No symptoms were recorded for this request.</p>
                                 @endif
                             </div>
+                        </div>
+
+                        <div class="rounded-3xl border border-gray-200 bg-white p-6">
+                            <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Reason for Online Consultation</p>
+                            <p class="mt-4 text-sm text-slate-700">{{ $consultation->online_reason ?? 'No reason provided.' }}</p>
                         </div>
 
                         @if(!empty($consultation->file_attachments))

@@ -24,7 +24,19 @@
                                     <p class="mt-1 text-sm text-slate-600">{{ 'Summary of symptoms: ' . ($activeConsultationSummary ?? 'No symptoms recorded') }}</p>
                                 </div>
                                 <div class="inline-flex items-center gap-3">
-                                    <span class="inline-flex items-center rounded-full bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-700">{{ ucfirst($activeConsultation->request_status) }}</span>
+                                    @php
+                                        $status = $activeConsultation->request_status;
+                                        $statusClasses = 'inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold ';
+                                        if (in_array($status, ['rejected', 'cancelled'])) {
+                                            $statusClasses .= 'bg-red-100 text-red-700';
+                                        } elseif ($status === 'completed') {
+                                            $statusClasses .= 'bg-emerald-100 text-emerald-700';
+                                        } else {
+                                            $statusClasses .= 'bg-slate-100 text-slate-700';
+                                        }
+                                    @endphp
+
+                                    <span class="{{ $statusClasses }}">{{ ucfirst($status) }}</span>
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
                                         <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
                                     </svg>

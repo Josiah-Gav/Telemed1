@@ -27,15 +27,49 @@
         handleFiles(event) {
             this.uploadedFiles = Array.from(event.target.files || []);
         },
+        validationError(message) {
+            alert(message);
+        },
+        canAdvanceToStep(step) {
+            if (step === 3 && this.selectedSymptoms.length === 0) {
+                this.validationError('Please add at least one symptom before proceeding to additional details.');
+                return false;
+            }
+            if (step === 4) {
+                const reason = this.$refs.consultationForm.querySelector('[name=&quot;online_reason&quot;]')?.value?.trim() || '';
+                if (!reason) {
+                    this.validationError('Please provide a reason for seeking online consultation before reviewing your request.');
+                    return false;
+                }
+            }
+            return true;
+        },
+        goToStep(step) {
+            if (this.currentStep < 5 && this.canAdvanceToStep(step)) {
+                this.currentStep = step;
+            }
+        },
         submitForm() {
             console.log('submitForm: start');
             this.isSubmitting = true;
             try {
+                if (this.selectedSymptoms.length === 0) {
+                    this.validationError('You must provide at least one symptom before submitting your consultation request.');
+                    this.isSubmitting = false;
+                    return;
+                }
+
+                const onlineReason = this.$refs.consultationForm.querySelector('[name=&quot;online_reason&quot;]')?.value?.trim() || '';
+                if (!onlineReason) {
+                    this.validationError('You must provide a reason for seeking online consultation before submitting.');
+                    this.isSubmitting = false;
+                    return;
+                }
+
                 let formElement = this.$refs.consultationForm;
                 let formData = new FormData(formElement);
 
-                formData.delete('attachments[]');
-
+                formData.delete(&quot;attachments[]&quot;); 
                 this.uploadedFiles.forEach(file => {
                     formData.append('attachments[]', file);
                 });
@@ -384,21 +418,28 @@
                                 <h3 class="text-lg font-semibold text-gray-900">Additional Details</h3>
                                 <p class="mt-1 text-sm text-gray-500">Provide optional context images or medical documentation regarding your ongoing condition symptoms.</p>
                                 
-                                <div class="mt-6">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Attachments / Images (Optional)</label>
-                                    <div class="flex justify-center rounded-3xl border border-dashed border-gray-300 px-6 pt-5 pb-6 bg-slate-50 hover:bg-slate-100 transition relative">
-                                        <div class="space-y-1 text-center">
-                                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                                            </svg>
-                                            <div class="flex text-sm text-gray-600 justify-center">
-                                                <label for="attachments" class="relative cursor-pointer rounded-md font-semibold text-emerald-600 hover:text-emerald-500 focus-within:outline-none">
-                                                    <span>Upload files</span>
-                                                    <input id="attachments" name="attachments[]" type="file" class="sr-only" multiple accept="image/*" @change="handleFiles($event); filePreviews = []; const files = $event.target.files || []; for (let i = 0; i < files.length; i++) { const reader = new FileReader(); reader.onload = (e) => { filePreviews.push(e.target.result); }; reader.readAsDataURL(files[i]); }">
-                                                </label>
-                                                <p class="pl-1">or drag and drop</p>
+                                <div class="mt-6 space-y-6">
+                                    <div>
+                                        <label for="online_reason" class="block text-sm font-medium text-gray-700 mb-2">Reason for seeking online consultation</label>
+                                        <textarea id="online_reason" name="online_reason" x-ref="online_reason" rows="4" required class="mt-1 block w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" placeholder="Describe why you are seeking online consultation today."></textarea>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Attachments / Images (Optional)</label>
+                                        <div class="flex justify-center rounded-3xl border border-dashed border-gray-300 px-6 pt-5 pb-6 bg-slate-50 hover:bg-slate-100 transition relative">
+                                            <div class="space-y-1 text-center">
+                                                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                                                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                                </svg>
+                                                <div class="flex text-sm text-gray-600 justify-center">
+                                                    <label for="attachments" class="relative cursor-pointer rounded-md font-semibold text-emerald-600 hover:text-emerald-500 focus-within:outline-none">
+                                                        <span>Upload files</span>
+                                                        <input id="attachments" name="attachments[]" type="file" class="sr-only" multiple accept="image/*" @change="handleFiles($event); filePreviews = []; const files = $event.target.files || []; for (let i = 0; i < files.length; i++) { const reader = new FileReader(); reader.onload = (e) => { filePreviews.push(e.target.result); }; reader.readAsDataURL(files[i]); }">
+                                                    </label>
+                                                    <p class="pl-1">or drag and drop</p>
+                                                </div>
+                                                <p class="text-xs text-gray-500">PNG, JPG, GIF up to 10MB each</p>
                                             </div>
-                                            <p class="text-xs text-gray-500">PNG, JPG, GIF up to 10MB each</p>
                                         </div>
                                     </div>
                                 </div>
@@ -477,7 +518,7 @@
                             <a href="{{ route('dashboard') }}" x-show="currentStep === 1" class="inline-flex items-center justify-center rounded-full border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</a>
                             
                             <button type="button" 
-                                    @click="currentStep = currentStep + 1" 
+                                    @click="goToStep(currentStep + 1)" 
                                     x-show="currentStep < 4"
                                     class="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
                                 Next

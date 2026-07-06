@@ -26,6 +26,7 @@ class Consultation extends Model
         'assigned_nurse_id',
         'concern_category',
         'symptoms_desc',
+        'online_reason',
         'request_status',
         'file_attachments', // Added your new column here
     ];

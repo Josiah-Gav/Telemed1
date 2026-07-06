@@ -15,11 +15,11 @@ return new class extends Migration
             // PK -> request_id : BIGINT
             $table->id('request_id'); 
             
-            // FK -> patient_id : BIGINT (Assuming it links to your 'users' table)
-            $table->foreignId('patient_id')->constrained('users')->onDelete('cascade');
+            // FK -> patient_id : BIGINT (links to users.user_id)
+            $table->foreignId('patient_id')->constrained('users', 'user_id')->onDelete('cascade');
             
-            // FK -> assigned_physician_id : BIGINT NULL (Nullable, links to your 'users' table)
-            $table->foreignId('assigned_physician_id')->nullable()->constrained('users')->onDelete('set null');
+            // FK -> assigned_physician_id : BIGINT NULL (links to users.user_id)
+            $table->foreignId('assigned_physician_id')->nullable()->constrained('users', 'user_id')->onDelete('set null');
             
             // concern_category : VARCHAR(100)
             $table->string('concern_category', 100);
@@ -47,8 +47,8 @@ return new class extends Migration
             $table->timestamp('submitted_at')->useCurrent();
             $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
             
-            // FK -> assigned_nurse_id : BIGINT (Links to your 'users' table)
-            $table->foreignId('assigned_nurse_id')->nullable()->constrained('users')->onDelete('set null');
+            // FK -> assigned_nurse_id : BIGINT (links to users.user_id)
+            $table->foreignId('assigned_nurse_id')->nullable()->constrained('users', 'user_id')->onDelete('set null');
         });
     }
 

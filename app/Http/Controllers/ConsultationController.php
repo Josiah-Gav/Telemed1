@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Consultation;
 use App\Models\SymptomLog; // Double-check that your SymptomLog model exists
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Support\Facades\Storage;
@@ -55,13 +56,14 @@ class ConsultationController extends Controller
         $validated = $request->validate([
             'concern_category' => 'required|string|max:100',
             'symptoms_payload' => 'required|string', 
+            'online_reason'    => 'required|string|max:1000',
             'attachments.*'    => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240', // 10MB Limit
         ]);
 
         // 3. Decode alpine symptom list tracking payload 
         $symptomsData = json_decode($validated['symptoms_payload'], true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($symptomsData)) {
-            return response()->json(['success' => false, 'message' => 'Invalid symptoms format.'], 422);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($symptomsData) || count($symptomsData) === 0) {
+            return response()->json(['success' => false, 'message' => 'Please provide at least one symptom.'], 422);
         }
 
         // 3. Process uploads. Prefer Cloudinary, but fall back to local storage if it fails.
@@ -92,6 +94,7 @@ class ConsultationController extends Controller
                 'assigned_nurse_id'     => null,
                 'concern_category'      => $validated['concern_category'],
                 'symptoms_desc'         => $symptomsData,
+                'online_reason'         => $validated['online_reason'] ?? null,
                 'file_attachments'      => !empty($uploadedFilesUrls) ? $uploadedFilesUrls : null, // Securely stores the remote Cloudinary cloud link array
                 'request_status'        => 'pending',
             ]);
@@ -113,9 +116,7 @@ class ConsultationController extends Controller
      */
     public function show(Consultation $consultation)
     {
-        if ($consultation->patient_id !== auth()->id()) {
-            abort(403, 'Unauthorized access.');
-        }
+        abort_unless(Gate::allows('view', $consultation), 403, 'Unauthorized access.');
 
         return view('patient.consultation-details', compact('consultation'));
     }
