@@ -16,9 +16,13 @@
                         {{ __('Dashboard') }}
                     </x-nav-link>
 
-                    <a href="{{ route('newconsultation') }}" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition duration-150 ease-in-out">
+                    <x-nav-link :href="route('newconsultation')" :active="request()->routeIs('newconsultation')">
                         {{ __('New Consultation') }}
-                    </a>
+                    </x-nav-link>
+
+                    <x-nav-link :href="route('consultations.history')" :active="request()->routeIs('consultations.history')">
+                        {{ __('Consultation History') }}
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -76,6 +80,9 @@
             </x-responsive-nav-link>
            <x-responsive-nav-link :href="route('newconsultation')" :active="request()->routeIs('newconsultation')">
                 {{ __('New Consultation') }}
+            </x-responsive-nav-link>
+           <x-responsive-nav-link :href="route('consultations.history')" :active="request()->routeIs('consultations.history')">
+                {{ __('Consultation History') }}
             </x-responsive-nav-link>
         </div>
 

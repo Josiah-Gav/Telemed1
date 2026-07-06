@@ -24,15 +24,37 @@ class ConsultationController extends Controller
     }
 
     /**
+     * Display the patient's consultation history.
+     */
+    public function history()
+    {
+        $consultations = Consultation::where('patient_id', auth()->id())
+            ->latest('submitted_at')
+            ->get();
+
+        return view('patient.consultation-history', compact('consultations'));
+    }
+
+    /**
      * Show the form for creating a new consultation.
      */
     public function create()
     {
-        // Mocking the patient data context for the Blade layout variables
-        // Adjust this to point to your actual patient profile/user relationship
-        $patient = auth()->user(); 
+        $patient = auth()->user();
 
-        return view('newconsultation', compact('patient'));
+        if ($patient->role !== 'patient') {
+            abort(403, 'Unauthorized access.');
+        }
+
+        $hasActiveConsultation = Consultation::where('patient_id', auth()->id())
+            ->whereIn('request_status', ['pending', 'assigned', 'scheduled', 'active'])
+            ->exists();
+
+        if ($hasActiveConsultation) {
+            return redirect()->route('dashboard')->with('status', 'You already have an active consultation request.');
+        }
+
+        return view('patient.newconsultation', compact('patient'));
     }
 
     /**

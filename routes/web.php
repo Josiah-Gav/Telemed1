@@ -29,6 +29,7 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::middleware(['auth'])->group(function () {
+    Route::get('/consultations/history', [ConsultationController::class, 'history'])->name('consultations.history');
     Route::get('/consultations/create', [ConsultationController::class, 'create'])->name('consultations.create');
     Route::post('/consultations', [ConsultationController::class, 'store'])->name('consultations.store');
     Route::get('/consultations/{consultation}', [ConsultationController::class, 'show'])->name('consultations.show');
