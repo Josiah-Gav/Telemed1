@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
 
 class Consultation extends Model
 {
@@ -40,4 +41,9 @@ class Consultation extends Model
         'symptoms_desc'    => 'array',
         'file_attachments' => 'array', // Automatically handles converting arrays to JSON and vice-versa
     ];
+
+    public function patient()
+    {
+        return $this->belongsTo(User::class, 'patient_id', 'user_id');
+    }
 }

@@ -5,24 +5,42 @@
             <div class="flex">
                 <!-- Logo -->
                 <div class="shrink-0 flex items-center">
-                    <a href="{{ route('dashboard') }}">
+                    <a href="{{ Auth::check() && Auth::user()->role === 'nurse' ? route('nurse.dashboard', ['nurse' => Auth::user()]) : route('dashboard') }}">
                         <x-application-logo class="block h-9 w-auto fill-current text-gray-800" />
                     </a>
                 </div>
 
                 <!-- Navigation Links -->
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                    <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                        {{ __('Dashboard') }}
-                    </x-nav-link>
+                    @if(Auth::check() && Auth::user()->role === 'nurse')
+                        <x-nav-link :href="route('nurse.dashboard', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-nav-link>
 
-                    <x-nav-link :href="route('newconsultation')" :active="request()->routeIs('newconsultation')">
-                        {{ __('New Consultation') }}
-                    </x-nav-link>
+                        <x-nav-link :href="route('nurse.consultation_inbox', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.consultation_inbox')">
+                            {{ __('Consultation Inbox') }}
+                        </x-nav-link>
 
-                    <x-nav-link :href="route('consultations.history')" :active="request()->routeIs('consultations.history')">
-                        {{ __('Consultation History') }}
-                    </x-nav-link>
+                        <x-nav-link :href="route('nurse.follow_up_requests', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.follow_up_requests')">
+                            {{ __('Follow-up Requests') }}
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('nurse.consultation_history', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.consultation_history')">
+                            {{ __('Consultation History') }}
+                        </x-nav-link>
+                    @else
+                        <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('newconsultation')" :active="request()->routeIs('newconsultation')">
+                            {{ __('New Consultation') }}
+                        </x-nav-link>
+
+                        <x-nav-link :href="route('consultations.history')" :active="request()->routeIs('consultations.history')">
+                            {{ __('Consultation History') }}
+                        </x-nav-link>
+                    @endif
                 </div>
             </div>
 
@@ -75,15 +93,30 @@
     <!-- Responsive Navigation Menu -->
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
-            <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                {{ __('Dashboard') }}
-            </x-responsive-nav-link>
-           <x-responsive-nav-link :href="route('newconsultation')" :active="request()->routeIs('newconsultation')">
-                {{ __('New Consultation') }}
-            </x-responsive-nav-link>
-           <x-responsive-nav-link :href="route('consultations.history')" :active="request()->routeIs('consultations.history')">
-                {{ __('Consultation History') }}
-            </x-responsive-nav-link>
+            @if(Auth::check() && Auth::user()->role === 'nurse')
+                <x-responsive-nav-link :href="route('nurse.dashboard', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.dashboard')">
+                    {{ __('Dashboard') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('nurse.consultation_inbox', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.consultation_inbox')">
+                    {{ __('Consultation Inbox') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('nurse.follow_up_requests', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.follow_up_requests')">
+                    {{ __('Follow-up Requests') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('nurse.consultation_history', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.consultation_history')">
+                    {{ __('Consultation History') }}
+                </x-responsive-nav-link>
+            @else
+                <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                    {{ __('Dashboard') }}
+                </x-responsive-nav-link>
+               <x-responsive-nav-link :href="route('newconsultation')" :active="request()->routeIs('newconsultation')">
+                    {{ __('New Consultation') }}
+                </x-responsive-nav-link>
+               <x-responsive-nav-link :href="route('consultations.history')" :active="request()->routeIs('consultations.history')">
+                    {{ __('Consultation History') }}
+                </x-responsive-nav-link>
+            @endif
         </div>
 
         <!-- Responsive Settings Options -->
