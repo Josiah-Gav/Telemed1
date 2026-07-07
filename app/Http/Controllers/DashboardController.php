@@ -38,7 +38,7 @@ class DashboardController extends Controller
             case 'physician':
                 return view('physician.dashboard');
             case 'nurse':
-                return view('nurse.dashboard');
+                return redirect()->route('nurse.dashboard', ['nurse' => $user]);
             default:
                 abort(403, 'Unauthorized action. Role not recognized.');
         }

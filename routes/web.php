@@ -20,6 +20,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/newconsultation', [DashboardController::class, 'newconsultation'])
         ->name('newconsultation');
 
+    // Nurse-specific navigation pages
+    Route::prefix('nurses/{nurse}')->group(function () {
+        Route::get('/dashboard', [\App\Http\Controllers\NurseController::class, 'dashboard'])
+            ->name('nurse.dashboard');
+
+        Route::get('/consultation-inbox', [\App\Http\Controllers\NurseController::class, 'consultationInbox'])
+            ->name('nurse.consultation_inbox');
+
+        Route::get('/follow-up-requests', [\App\Http\Controllers\NurseController::class, 'followUpRequests'])
+            ->name('nurse.follow_up_requests');
+
+        Route::get('/consultation-history', [\App\Http\Controllers\NurseController::class, 'consultationHistory'])
+            ->name('nurse.consultation_history');
+    });
+
+    // Attachment download for consultations (nurse only access validated in controller)
+    Route::get('/consultations/{consultation}/attachments/{file}', [\App\Http\Controllers\AttachmentController::class, 'show'])
+        ->name('consultation.attachment');
+
 }); // --- MIDDLEWARE GROUP ENDS HERE ---
 
 Route::middleware('auth')->group(function () {
