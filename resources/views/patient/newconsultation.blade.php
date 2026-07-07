@@ -13,6 +13,7 @@
         selectedType: 'general', 
         selectedSymptoms: [], 
         uploadedFiles: [],
+        filePreviews: [],
         otherSymptom: '', 
         customSymptomInput: '', 
         showCustomSymptomInput: false, 
@@ -25,7 +26,36 @@
         removeSymptom(name) { const index = this.selectedSymptoms.findIndex(s => s.name === name); if (index > -1) { this.selectedSymptoms.splice(index, 1); } }, 
         toggleSymptom(symptom) { const index = this.selectedSymptoms.findIndex(s => s.name === symptom); if (index > -1) { this.selectedSymptoms.splice(index, 1); } else { this.selectedSymptoms.push({ name: symptom, date: '', time: '', severity: 3 }); } },
         handleFiles(event) {
-            this.uploadedFiles = Array.from(event.target.files || []);
+            const files = Array.from(event.target.files || []);
+            this.uploadedFiles = files;
+            this.filePreviews = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.filePreviews.push(e.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        },
+        removeFile(index) {
+            if (index < 0 || index >= this.uploadedFiles.length) return;
+            this.uploadedFiles.splice(index, 1);
+            this.filePreviews.splice(index, 1);
+            // Clear the input value so user can re-add same filename if desired
+            if (this.$refs && this.$refs.attachmentsInput) {
+                // If there are remaining files we can't set input.files directly; recreate a DataTransfer if supported
+                try {
+                    const dt = new DataTransfer();
+                    this.uploadedFiles.forEach(f => dt.items.add(f));
+                    this.$refs.attachmentsInput.files = dt.files;
+                } catch (e) {
+                    // Fallback: clear input when any file removed to avoid stale FileList issues
+                    if (this.uploadedFiles.length === 0) {
+                        this.$refs.attachmentsInput.value = null;
+                    }
+                }
+            }
         },
         validationError(message) {
             alert(message);
@@ -412,8 +442,7 @@
 
                         <!-- STEP 3 PANELS PLACEHOLDER (ADD YOUR ADDITIONAL CODE FIELDS HERE IN FUTURE) -->
                         <div x-show="currentStep === 3" x-cloak class="space-y-4">
-                            <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm" 
-                                x-data="{ filePreviews: [] }">
+                            <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                                 
                                 <h3 class="text-lg font-semibold text-gray-900">Additional Details</h3>
                                 <p class="mt-1 text-sm text-gray-500">Provide optional context images or medical documentation regarding your ongoing condition symptoms.</p>
@@ -434,7 +463,7 @@
                                                 <div class="flex text-sm text-gray-600 justify-center">
                                                     <label for="attachments" class="relative cursor-pointer rounded-md font-semibold text-emerald-600 hover:text-emerald-500 focus-within:outline-none">
                                                         <span>Upload files</span>
-                                                        <input id="attachments" name="attachments[]" type="file" class="sr-only" multiple accept="image/*" @change="handleFiles($event); filePreviews = []; const files = $event.target.files || []; for (let i = 0; i < files.length; i++) { const reader = new FileReader(); reader.onload = (e) => { filePreviews.push(e.target.result); }; reader.readAsDataURL(files[i]); }">
+                                                        <input id="attachments" name="attachments[]" type="file" class="sr-only" multiple accept="image/*" x-ref="attachmentsInput" @change="handleFiles($event)">
                                                     </label>
                                                     <p class="pl-1">or drag and drop</p>
                                                 </div>
@@ -451,6 +480,9 @@
                                             <template x-for="(image, index) in filePreviews" :key="index">
                                                 <div class="relative group h-24 rounded-2xl border border-gray-200 overflow-hidden bg-gray-100 shadow-sm">
                                                     <img :src="image" class="h-full w-full object-cover">
+                                                    <button type="button" @click="removeFile(index)" class="absolute right-1 top-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white text-red-600 shadow hover:bg-red-50">
+                                                        &times;
+                                                    </button>
                                                 </div>
                                             </template>
                                         </div>
