@@ -18,7 +18,7 @@ class DashboardController extends Controller
             case 'patient':
                 $patientInfo = Auth::user();
                 $activeConsultation = Consultation::where('patient_id', auth()->id())
-                    ->whereIn('request_status', ['pending', 'assigned', 'scheduled', 'active', 'completed'])
+                    ->whereIn('request_status', ['pending', 'assigned', 'scheduled', 'active'])
                     ->latest('submitted_at')
                     ->first();
 

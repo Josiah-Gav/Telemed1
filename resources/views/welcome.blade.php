@@ -109,7 +109,7 @@
                 <!-- Features Section -->
                 <section id="features" class="space-y-16">
                     <div class="text-center space-y-4">
-                        <h2 class="text-4xl font-bold text-gray-900">Why Choose CLSU Telemedicine?</h2>
+                        <h2 class="text-4xl font-bold text-gray-900">CLSU Telemedicine</h2>
                         <p class="text-lg text-gray-600 max-w-2xl mx-auto">
                             Everything you need for better healthcare, in one simple platform.
                         </p>
