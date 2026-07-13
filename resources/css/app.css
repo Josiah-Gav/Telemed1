@@ -7,3 +7,18 @@
     display: none !important;
   }
 }
+
+:root {
+  --clsu-green: #008000;
+  --clsu-gold: #FFD700;
+}
+
+@layer utilities {
+  .bg-clsu-green { background-color: var(--clsu-green) !important; }
+  .text-clsu-green { color: var(--clsu-green) !important; }
+  .bg-clsu-gold { background-color: var(--clsu-gold) !important; }
+  .text-clsu-gold { color: var(--clsu-gold) !important; }
+  .bg-clsu-green-100 { background-color: rgba(0,128,0,0.08) !important; }
+  .text-clsu-green-700 { color: #065f05 !important; }
+  .ring-clsu-green { box-shadow: 0 0 0 4px rgba(0,128,0,0.08); }
+}

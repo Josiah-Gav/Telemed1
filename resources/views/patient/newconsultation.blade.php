@@ -229,8 +229,8 @@
                 <div class="bg-white shadow-sm sm:rounded-2xl border border-gray-200 overflow-hidden">
                     <div class="p-6 md:p-8 space-y-6">
                         
-                        <!-- CHANGER: Hide static patient profile card ONLY on step 5 to keep the success view clean -->
-                        <div class="space-y-4" x-show="currentStep < 5">
+                        <!-- CHANGER: Show static patient profile card only on step 1 -->
+                        <div class="space-y-4" x-show="currentStep === 1">
                             <div class="pb-4 border-b border-gray-200">
                                 <h3 class="text-lg font-semibold text-gray-900">Patient Information</h3>
                                 <p class="mt-1 text-sm text-gray-500">Please confirm your details before proceeding.</p>
@@ -282,7 +282,7 @@
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m2 4H7m0-8h10M5 6h14M5 18h14" />
                                                 </svg>
                                             </div>
-                                            <p class="text-base font-semibold text-gray-900">General Consultation</p>
+                                            <p class="text-base font-semibold text-gray-900">New Consultation</p>
                                         </div>
                                         <p class="mt-3 text-sm text-gray-600">For general health concerns, minor illnesses, and preventive care.</p>
                                     </div>

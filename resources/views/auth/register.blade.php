@@ -1,5 +1,10 @@
 <x-guest-layout>
-    <form method="POST" action="{{ route('register') }}">
+    <div class="mb-6">
+        <h2 class="text-2xl sm:text-3xl md:text-4xl font-extrabold text-emerald-800">Create an account</h2>
+        <p class="text-sm sm:text-base text-gray-600">Register as Student / Faculty to access CLSU Telemedicine</p>
+    </div>
+
+    <form method="POST" action="{{ route('register') }}" class="space-y-4">
         @csrf
 
         <!-- Name -->
@@ -45,12 +50,10 @@
             <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
         </div>
 
-        <div class="flex items-center justify-end mt-4">
-            <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('login') }}">
-                {{ __('Already registered?') }}
-            </a>
+        <div class="flex items-center justify-between mt-4">
+            <a class="text-sm text-emerald-700 hover:text-emerald-900" href="{{ route('login') }}">{{ __('Already registered?') }}</a>
 
-            <x-primary-button class="ms-4">
+            <x-primary-button class="ms-4 w-32 bg-gradient-to-r from-emerald-600 to-emerald-700 border-0">
                 {{ __('Register') }}
             </x-primary-button>
         </div>

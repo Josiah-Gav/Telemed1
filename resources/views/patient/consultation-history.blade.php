@@ -10,12 +10,12 @@
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 bg-white border-b border-gray-200">
                     <div class="flex flex-col gap-6">
-                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                             <div>
                                 <h3 class="text-lg font-semibold text-slate-900">Your Consultation History</h3>
                                 <p class="mt-1 text-sm text-slate-500">Review your past consultation requests and their status.</p>
                             </div>
-                            <a href="{{ route('consultations.create') }}" class="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">New Consultation</a>
+                            <a href="{{ route('consultations.create') }}" class="inline-flex items-center justify-center rounded-full bg-clsu-green px-5 py-2.5 text-sm font-semibold text-white hover:opacity-95">New Consultation</a>
                         </div>
 
                         @if($consultations->isEmpty())
@@ -46,7 +46,7 @@
                                                     }
                                                 @endphp
                                                 <span class="{{ $badgeClasses }}">{{ ucfirst($status) }}</span>
-                                                <span class="text-sm text-slate-400">View details</span>
+                                                <span class="text-sm text-slate-400">View details ></span>
                                             </div>
                                         </div>
                                     </a>

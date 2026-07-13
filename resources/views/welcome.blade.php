@@ -26,8 +26,8 @@
             <div class="max-w-6xl mx-auto px-6 lg:px-8 py-4 flex items-center justify-between">
                 <!-- Logo -->
                 <div class="flex items-center gap-2">
-                    <div class="w-10 h-10 bg-gradient-to-br from-green-600 to-green-700 rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold text-lg">T</span>
+                    <div class="w-10 h-10 rounded-lg overflow-hidden">
+                        <img src="{{ asset('images/clsu_logo.png') }}" alt="CLSU logo" class="w-full h-full object-cover" />
                     </div>
                     <span class="font-bold text-lg text-gray-900 hidden sm:inline">CLSU Telemedicine</span>
                 </div>
@@ -247,8 +247,8 @@
                     <!-- Brand -->
                     <div>
                         <div class="flex items-center gap-2 mb-4">
-                            <div class="w-8 h-8 bg-gradient-to-br from-green-600 to-green-700 rounded flex items-center justify-center">
-                                <span class="text-white font-bold">T</span>
+                            <div class="w-8 h-8 rounded overflow-hidden">
+                                <img src="{{ asset('images/clsu_logo.png') }}" alt="CLSU logo" class="w-full h-full object-cover" />
                             </div>
                             <span class="font-bold text-gray-900">CLSU Telemedicine</span>
                         </div>
