@@ -36,10 +36,40 @@
                     this.showModal = false;
                     this.selectedRequest = null;
                 },
+                formatSeverityLabel(severity) {
+                    const labels = {
+                        1: '1 - Very Mild',
+                        2: '2 - Mild',
+                        3: '3 - Moderate',
+                        4: '4 - Severe',
+                    };
+
+                    return labels[severity] || 'N/A';
+                },
                 formatSymptoms(symptoms) {
                     if (!symptoms) return '';
                     if (Array.isArray(symptoms)) {
-                        return symptoms.map(item => `<li>${item['name'] ?? item}</li>`).join('');
+                        return symptoms.map(item => {
+                            const name = typeof item === 'object' ? (item.name ?? item['name'] ?? '') : item;
+                            const severity = typeof item === 'object' ? (item.severity ?? item['severity'] ?? null) : null;
+                            let severityClass = 'bg-slate-100 text-slate-700';
+
+                            if (severity === 1) {
+                                severityClass = 'bg-green-100 text-green-800';
+                            } else if (severity === 2) {
+                                severityClass = 'bg-yellow-100 text-yellow-800';
+                            } else if (severity === 3) {
+                                severityClass = 'bg-orange-100 text-orange-800';
+                            } else if (severity === 4) {
+                                severityClass = 'bg-red-100 text-red-800';
+                            }
+
+                            const severityBadge = severity !== null && severity !== undefined && severity !== ''
+                                ? `<span class="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${severityClass}">${this.formatSeverityLabel(severity)}</span>`
+                                : '';
+
+                            return `<li class="flex items-center flex-wrap gap-2">${name}${severityBadge}</li>`;
+                        }).join('');
                     }
                     return `<li>${symptoms}</li>`;
                 }
@@ -59,9 +89,8 @@
                                 <thead class="bg-gray-50">
                                     <tr>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Request ID') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient ID') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Concern') }}</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Severity') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
@@ -71,9 +100,65 @@
                                     @foreach($pendingRequests as $request)
                                         <tr>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->request_id }}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->patient_id }}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->concern_category ?? __('N/A') }}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                @php
+                                                    $symptomsDisplay = __('N/A');
+                                                    $symptomsData = $request->symptoms_desc;
+
+                                                    if (!empty($symptomsData)) {
+                                                        if (is_array($symptomsData)) {
+                                                            $symptomsDisplay = collect($symptomsData)
+                                                                ->map(function ($item) {
+                                                                    return is_array($item) ? ($item['name'] ?? null) : $item;
+                                                                })
+                                                                ->filter()
+                                                                ->implode(', ');
+                                                        } else {
+                                                            $symptomsDisplay = $symptomsData;
+                                                        }
+                                                    }
+                                                @endphp
+                                                {{ $symptomsDisplay }}
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                @php
+                                                    $highestSeverity = null;
+                                                    $severityClass = 'bg-gray-100 text-gray-700';
+                                                    $severityLabel = __('N/A');
+                                                    $symptomsData = $request->symptoms_desc;
+
+                                                    if (!empty($symptomsData) && is_array($symptomsData)) {
+                                                        $severityValues = collect($symptomsData)
+                                                            ->map(function ($item) {
+                                                                return is_array($item) ? ($item['severity'] ?? null) : null;
+                                                            })
+                                                            ->filter(fn($value) => is_numeric($value))
+                                                            ->map(fn($value) => (int) $value)
+                                                            ->all();
+
+                                                        if (!empty($severityValues)) {
+                                                            $highestSeverity = max($severityValues);
+                                                        }
+                                                    }
+
+                                                    if ($highestSeverity === 1) {
+                                                        $severityClass = 'bg-green-100 text-green-800';
+                                                        $severityLabel = __('1 - Very Mild');
+                                                    } elseif ($highestSeverity === 2) {
+                                                        $severityClass = 'bg-yellow-100 text-yellow-800';
+                                                        $severityLabel = __('2 - Mild');
+                                                    } elseif ($highestSeverity === 3) {
+                                                        $severityClass = 'bg-orange-100 text-orange-800';
+                                                        $severityLabel = __('3 - Moderate');
+                                                    } elseif ($highestSeverity === 4) {
+                                                        $severityClass = 'bg-red-100 text-red-800';
+                                                        $severityLabel = __('4 - Severe');
+                                                    }
+                                                @endphp
+                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold {{ $severityClass }}">
+                                                    {{ $highestSeverity !== null ? $severityLabel : __('N/A') }}
+                                                </span>
+                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
                                             @php
                                                 $statusClasses = [
@@ -106,80 +191,116 @@
             </div>
         </div>
 
-        <div x-show="showModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-            <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden">
-                <div class="border-b border-gray-200 p-6 flex items-start justify-between gap-4">
+        <div x-show="showModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3 py-3">
+            <div class="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
+                <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-900">{{ __('Consultation Details') }}</h3>
-                        <p class="text-sm text-gray-500">{{ __('Review and decide on the selected consultation request.') }}</p>
+                        <h3 class="text-base font-semibold text-gray-900">{{ __('Consultation Details') }}</h3>
+                        <p class="text-sm text-gray-500">{{ __('Review the selected consultation request.') }}</p>
                     </div>
-                    <button type="button" @click="closeModal()" class="text-gray-400 hover:text-gray-700">
+                    <button type="button" @click="closeModal()" class="rounded-full p-1.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700">
                         <span class="sr-only">{{ __('Close') }}</span>
                         ✕
                     </button>
                 </div>
 
-                <div class="p-6 space-y-4">
-                    <div class="grid gap-4 sm:grid-cols-2">
+                <div class="space-y-3 p-4">
+                    <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
                         <div>
-                            <p class="text-xs font-semibold text-gray-500 uppercase">{{ __('Request ID') }}</p>
-                            <p class="mt-1 text-sm text-gray-900" x-text="selectedRequest?.request_id"></p>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Patient Name') }}</p>
+                            <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedRequest?.patient_name"></p>
                         </div>
                         <div>
-                            <p class="text-xs font-semibold text-gray-500 uppercase">{{ __('Patient Name') }}</p>
-                            <p class="mt-1 text-sm text-gray-900" x-text="selectedRequest?.patient_name"></p>
-                        </div>
-                        <div>
-                            <p class="text-xs font-semibold text-gray-500 uppercase">{{ __('Patient ID') }}</p>
-                            <p class="mt-1 text-sm text-gray-900" x-text="selectedRequest?.patient_id"></p>
-                        </div>
-                        <div>
-                            <p class="text-xs font-semibold text-gray-500 uppercase">{{ __('Submitted At') }}</p>
-                            <p class="mt-1 text-sm text-gray-900" x-text="selectedRequest?.submitted_at ?? '{{ __('Unknown') }}'"></p>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Submitted At') }}</p>
+                            <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedRequest?.submitted_at ?? '{{ __('Unknown') }}'"></p>
                         </div>
                     </div>
 
-                    <div>
-                        <p class="text-xs font-semibold text-gray-500 uppercase">{{ __('Concern Category') }}</p>
-                        <p class="mt-1 text-sm text-gray-900" x-text="selectedRequest?.concern_category ?? '{{ __('N/A') }}'"></p>
+                    <div class="rounded-xl border border-gray-200 p-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Concern Category') }}</p>
+                        <p class="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700" x-text="selectedRequest?.concern_category ?? '{{ __('N/A') }}'"></p>
                     </div>
 
-                    <div>
-                        <p class="text-xs font-semibold text-gray-500 uppercase">{{ __('Symptoms') }}</p>
+                    <div class="rounded-xl border border-gray-200 p-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Symptoms') }}</p>
                         <template x-if="selectedRequest?.symptoms_desc">
-                            <ul class="mt-2 list-disc list-inside text-sm text-gray-900" x-html="formatSymptoms(selectedRequest?.symptoms_desc)"></ul>
+                            <ul class="mt-2 space-y-2 text-sm text-gray-900" x-html="formatSymptoms(selectedRequest?.symptoms_desc)"></ul>
                         </template>
                         <p class="mt-2 text-sm text-gray-500" x-show="!selectedRequest?.symptoms_desc">{{ __('No symptom details provided.') }}</p>
                     </div>
 
-                    <div>
-                        <p class="text-xs font-semibold text-gray-500 uppercase">{{ __('Reason for online consultation') }}</p>
-                        <p class="mt-1 text-sm text-gray-900" x-text="selectedRequest?.online_reason ?? '{{ __('N/A') }}'"></p>
+                    <div class="rounded-xl border border-gray-200 p-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Reason for online consultation') }}</p>
+                        <p class="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-sm leading-6 text-gray-700" x-text="selectedRequest?.online_reason ?? '{{ __('N/A') }}'"></p>
                     </div>
 
-                    <div>
-                        <p class="text-xs font-semibold text-gray-500 uppercase">{{ __('Attachments') }}</p>
+                    <div class="rounded-xl border border-gray-200 p-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Attachments') }}</p>
                         <template x-if="selectedRequest?.file_attachments && selectedRequest.file_attachments.length">
-                            <ul class="mt-1 list-disc list-inside text-sm text-gray-900">
+                            <ul class="mt-2 space-y-2 text-sm text-gray-900">
                                 <template x-for="file in selectedRequest.file_attachments" :key="file">
-                                    <li>
-                                        <a :href="file" target="_blank" class="text-indigo-600 hover:underline" x-text="file.split('/').pop()"></a>
+                                    <li class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                        <a :href="file" target="_blank" class="font-medium text-indigo-600 hover:underline" x-text="file.split('/').pop()"></a>
                                     </li>
                                 </template>
                             </ul>
                         </template>
-                        <p class="mt-1 text-sm text-gray-500" x-show="!selectedRequest?.file_attachments || !selectedRequest.file_attachments.length">{{ __('No attachments.') }}</p>
+                        <p class="mt-2 text-sm text-gray-500" x-show="!selectedRequest?.file_attachments || !selectedRequest.file_attachments.length">{{ __('No attachments.') }}</p>
                     </div>
                 </div>
 
-                <div class="border-t border-gray-200 p-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                    <button type="button" @click="closeModal()" class="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                <div class="flex flex-col gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:justify-end">
+                    <button type="button" @click="closeModal()" class="inline-flex justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100">
                         {{ __('Close') }}
                     </button>
-                    <button type="button" class="inline-flex justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                    <button type="button" 
+                        @click="Swal.fire({
+                        title: 'Reject Consultation Request?',
+                        text: 'Please provide a reason for rejecting this consultation:',
+                        icon: 'warning',
+                        input: 'textarea',
+                        inputPlaceholder: 'Type the rejection reason here...',
+                        inputAttributes: {
+                            'aria-label': 'Type your rejection reason here'
+                        },
+                        showCancelButton: true,
+                        confirmButtonColor: '#d33',
+                        cancelButtonColor: '#6b7280',
+                        confirmButtonText: 'Yes, reject it!',
+                        cancelButtonText: 'Cancel',
+                        
+                        inputValidator: (value) => {
+                            if (!value) {
+                                return 'You must provide a reason for rejection!';
+                            }
+                        }
+                    }).then((result) => {
+                        
+                        if (result.isConfirmed) {
+                            const rejectionReason = result.value;
+
+                            window.rejectionConsultation(selectedRequest?.request_id, rejectionReason);
+                        }
+                            
+                    });"
+                        class="inline-flex justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"> 
                         {{ __('Reject') }}
                     </button>
-                    <button type="button" class="inline-flex justify-center rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">
+                    <button type="button" 
+                        @click="Swal.fire({ 
+                            title: `{{ __('Approve Consultation Request?') }}`, 
+                            text: `{{ __('This will mark the consultation as approved.') }}`, 
+                            icon: 'warning', 
+                            showCancelButton: true, 
+                            confirmButtonColor: '#10b981', 
+                            cancelButtonColor: '#6b7280', 
+                            confirmButtonText: `{{ __('Yes, approve it!') }}` 
+                        }).then((result) => { 
+                            if (result.isConfirmed) { 
+                             window.approveConsultation(selectedRequest?.request_id);
+                            } 
+                        })" 
+                         class="inline-flex justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
                         {{ __('Approve') }}
                     </button>
                 </div>
@@ -187,4 +308,111 @@
         </div>
     </div>
 
+    <script>
+    // Explicitly bind the function to the window object to make it globally accessible
+    window.rejectionConsultation = function(consultationId, reason) {
+        if (!consultationId) {
+            Swal.fire('Error', 'Missing consultation request ID. Please reopen the request and try again.', 'error');
+            return;
+        }
+
+        // 1. Retrieve CSRF token securely
+        const csrfToken = $('meta[name="csrf-token"]').attr('content');
+
+        if (!csrfToken) {
+            console.error('CSRF token not found. Please ensure <meta name="csrf-token" content="{{ csrf_token() }}"> is in your <head>.');
+            return;
+        }
+
+        // 2. Perform the AJAX Request using jQuery
+        $.ajax({
+            url: `/consultations/${consultationId}/reject`,
+            type: 'POST',
+            contentType: 'application/json',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken
+            },
+            data: JSON.stringify({
+                rejection_reason: reason // Matches 'rejection_reason' in your Controller validation
+            }),
+            dataType: 'json',
+            success: function(data) {
+                if (data.success) {
+                    // Show success SweetAlert and refresh/redirect on close
+                    Swal.fire({
+                        title: 'Rejected!',
+                        text: data.message,
+                        icon: 'success',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        window.location.reload(); // Refresh the inbox to see updated statuses
+                    });
+                } else {
+                    Swal.fire('Error', data.message || 'Something went wrong.', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error:', error);
+                
+                // Retrieve Laravel's validation or custom error message if available
+                let errorMessage = 'Could not connect to the server. Please try again.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorMessage = xhr.responseJSON.message;
+                }
+                
+                Swal.fire('Error', errorMessage, 'error');
+            }
+        });
+    }
+    </script>
+
+    <script>
+        window.approveConsultation = function(consultationId) {
+            if (!consultationId) {
+                Swal.fire('Error', 'Missing consultation request ID. Please reopen the request and try again.', 'error');
+                return;
+            }
+
+            const csrfToken = $('meta[name="csrf-token"]').attr('content');
+
+            if (!csrfToken) {
+                console.error('CSRF token not found. Please ensure <meta name="csrf-token" content="{{ csrf_token() }}"> is in your <head>.');
+                return;
+            }
+
+            $.ajax({
+                url: `/consultations/${consultationId}/approve`,
+                type: 'POST',
+                contentType: 'application/json',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                dataType: 'json',
+                success: function(data) {
+                    if (data.success) {
+                        Swal.fire({
+                            title: 'Approved!',
+                            text: data.message,
+                            icon: 'success',
+                            confirmButtonText: 'OK'
+                        }).then(() => {
+                            window.location.reload();
+                        });
+                    } else {
+                        Swal.fire('Error', data.message || 'Something went wrong.', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error:', error);
+                    
+                    let errorMessage = 'Could not connect to the server. Please try again.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMessage = xhr.responseJSON.message;
+                    }
+                    
+                    Swal.fire('Error', errorMessage, 'error');
+                }
+            });
+        }
+    </script>
 </x-app-layout>

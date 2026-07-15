@@ -78,6 +78,16 @@
                             </div>
                         @endif
 
+                        @if(!empty($consultation->assigned_nurse_id))
+                            <div class="rounded-3xl border border-gray-200 bg-white p-6">
+                                <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Assigned Nurse</p>
+                                @php
+                                    $assignedNurseName = trim((optional($consultation->nurse)->first_name ?? '') . ' ' . (optional($consultation->nurse)->last_name ?? ''));
+                                @endphp
+                                <p class="mt-4 text-sm text-slate-700">{{ $assignedNurseName !== '' ? $assignedNurseName : 'Assigned nurse record not found.' }}</p>
+                            </div>
+                        @endif
+
                         <div class="text-right">
                             <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800">Back to Dashboard</a>
                         </div>

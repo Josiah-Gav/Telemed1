@@ -140,7 +140,38 @@ class ConsultationController extends Controller
     {
         abort_unless(Gate::allows('view', $consultation), 403, 'Unauthorized access.');
 
+        $consultation->load('nurse');
+
         return view('patient.consultation-details', compact('consultation'));
+    }
+
+
+    function rejectionConsultation(Request $request, Consultation $consultation)
+    {
+        // Validate the rejection reason
+        $request->validate([
+            'rejection_reason' => 'required|string|max:1000',
+        ]);
+
+        // Update the consultation status and save the rejection reason
+        $consultation->update([
+            'request_status' => 'rejected',
+            'rejection_reason' => $request->input('rejection_reason'),
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'Consultation request rejected successfully.']);
+    }
+
+    function approveConsultation(Request $request, Consultation $consultation)
+    {
+        // "approved" is not a valid enum value in consultation_requests.request_status.
+        // Move approved requests to "assigned" so they exit the pending inbox.
+        $consultation->update([
+            'request_status' => 'assigned',
+            'assigned_nurse_id' => auth()->id(),
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'Consultation request approved successfully.']);
     }
 
     // You can leave edit, update, and destroy empty or remove them if unused!

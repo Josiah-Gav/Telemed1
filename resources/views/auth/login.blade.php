@@ -4,6 +4,12 @@
         <p class="text-sm sm:text-base text-gray-600">Sign in to your CLSU Campus Telemedicine account</p>
     </div>
 
+    <div class="mb-4">
+        <a href="{{ url('/') }}" class="inline-flex items-center text-sm font-medium text-emerald-700 hover:text-emerald-900">
+            ← Back to welcome
+        </a> 
+    </div>
+
     <!-- Session Status -->
     <x-auth-session-status class="mb-4" :status="session('status')" />
 

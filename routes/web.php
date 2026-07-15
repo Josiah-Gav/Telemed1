@@ -39,6 +39,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/consultations/{consultation}/attachments/{file}', [\App\Http\Controllers\AttachmentController::class, 'show'])
         ->name('consultation.attachment');
 
+    Route::post('/consultations/{consultation}/reject', [ConsultationController::class, 'rejectionConsultation'])
+    ->name('consultations.reject');
+
+    Route::post('/consultations/{consultation}/approve', [ConsultationController::class, 'approveConsultation'])
+    ->name('consultations.approve');
+
 }); // --- MIDDLEWARE GROUP ENDS HERE ---
 
 Route::middleware('auth')->group(function () {
