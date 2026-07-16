@@ -88,7 +88,17 @@
                             </div>
                         @endif
 
+                        
                         <div class="text-right">
+                            @if ($consultation->request_status !== 'active')
+                                <p class="mb-3 text-sm text-slate-500">You can cancel this consultation request if you wish.</p>
+                            <a
+                                href="javascript:void(0);"
+                                class="inline-flex items-center justify-center rounded-full bg-red-700 px-6 py-3 text-sm font-semibold text-white hover:bg-red-600"
+                                data-cancel-url="{{ route('consultations.cancel', $consultation) }}"
+                                onclick="cancelConsultation(this);"
+                            > Cancel </a>
+                            @endif
                             <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800">Back to Dashboard</a>
                         </div>
                     </div>
@@ -96,4 +106,73 @@
             </div>
         </div>
     </div>
+
+    <script>
+        function cancelConsultation(triggerElement) {
+            const cancelUrl = triggerElement?.dataset?.cancelUrl;
+            if (triggerElement === 'active') {
+                Swal.fire(
+                    'Error!',
+                    'You cannot cancel an active consultation.',
+                    'error'
+                );
+                return;
+            }
+            if (!cancelUrl) {
+                Swal.fire(
+                    'Error!',
+                    'Unable to find consultation cancel URL.',
+                    'error'
+                );
+                return;
+            }
+
+            Swal.fire({
+                title: 'Are you sure?',
+                text: 'You won\'t be able to revert this!',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, cancel it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Make an AJAX request to cancel the consultation
+                    fetch(cancelUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire(
+                                'Cancelled!',
+                                'Your consultation has been cancelled.',
+                                'success'
+                            ).then(() => {
+                                // Optionally, you can redirect or refresh the page
+                                window.location.href = '{{ route('dashboard') }}';
+                            });
+                        } else {
+                            Swal.fire(
+                                'Error!',
+                                data.message || 'An error occurred while cancelling the consultation.',
+                                'error'
+                            );
+                        }
+                    })
+                    .catch(error => {
+                        Swal.fire(
+                            'Error!',
+                            'An error occurred while cancelling the consultation.',
+                            'error'
+                        );
+                    });
+                }
+            });
+}
+    </script>
 </x-app-layout>

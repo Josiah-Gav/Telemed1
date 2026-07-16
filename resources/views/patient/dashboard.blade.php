@@ -31,7 +31,13 @@
                                             $statusClasses .= 'bg-red-100 text-red-700';
                                         } elseif ($status === 'completed') {
                                             $statusClasses .= 'bg-emerald-100 text-emerald-700';
-                                        } else {
+                                        } elseif (in_array($status, ['pending', 'assigned'])) {
+                                            $statusClasses .= 'bg-yellow-100 text-yellow-700';
+                                        } elseif ($status === 'scheduled') {
+                                            $statusClasses .= 'bg-indigo-100 text-indigo-700';
+                                        } elseif ($status === 'active') {
+                                            $statusClasses .= 'bg-blue-100 text-blue-700';
+                                        }else {
                                             $statusClasses .= 'bg-slate-100 text-slate-700';
                                         }
                                     @endphp

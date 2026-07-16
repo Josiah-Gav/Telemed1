@@ -28,6 +28,22 @@
                         <x-nav-link :href="route('nurse.consultation_history', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.consultation_history')">
                             {{ __('Consultation History') }}
                         </x-nav-link>
+                    @elseif(Auth::check() && Auth::user()->role === 'physician')
+                        <x-nav-link :href="route('physician.dashboard', ['physician' => Auth::user()])" :active="request()->routeIs('physician.dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('physician.consultation_inbox', ['physician' => Auth::user()])" :active="request()->routeIs('physician.consultation_inbox')">
+                            {{ __('Consultation Inbox') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('physician.consultation_history', ['physician' => Auth::user()])" :active="request()->routeIs('physician.consultation_history')">
+                            {{ __('Consultation History') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('physician.follow_up_requests', ['physician' => Auth::user()])" :active="request()->routeIs('physician.follow_up_requests')">
+                            {{ __('Follow-up Requests') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('physician.active_consultation', ['physician' => Auth::user()])" :active="request()->routeIs('physician.active_consultation')">
+                            {{ __('Active Consultations') }}
+                        </x-nav-link>
                     @else
                         <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                             {{ __('Dashboard') }}

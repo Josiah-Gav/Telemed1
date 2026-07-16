@@ -34,14 +34,31 @@ class NurseController extends Controller
     {
         $this->authorizeNurse($nurse);
 
+        $currentNurseId = (int) $nurse->user_id;
+
         $pendingRequests = Consultation::with('patient')
             ->where('request_status', 'pending')
             ->orderByDesc('submitted_at')
             ->get();
 
+        $assignedRequests = Consultation::with(['patient', 'nurse'])
+            ->whereIn('request_status', ['assigned', 'active', 'scheduled'])
+            ->orderByDesc('submitted_at')
+            ->get();
+
+        $assignedToCurrentNurse = $assignedRequests
+            ->where('assigned_nurse_id', $currentNurseId)
+            ->values();
+
+        $assignedToOtherNurses = $assignedRequests
+            ->filter(fn ($request) => (int) $request->assigned_nurse_id !== $currentNurseId)
+            ->values();
+
         return view('nurse.consultation_inbox', [
             'nurse' => $nurse,
             'pendingRequests' => $pendingRequests,
+            'assignedToCurrentNurse' => $assignedToCurrentNurse,
+            'assignedToOtherNurses' => $assignedToOtherNurses,
         ]);
     }
 

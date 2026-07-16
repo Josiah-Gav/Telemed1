@@ -164,14 +164,41 @@ class ConsultationController extends Controller
 
     function approveConsultation(Request $request, Consultation $consultation)
     {
+        $validated = $request->validate([
+            'priority_level' => 'required|in:High,Normal',
+        ]);
+
+        if ($consultation->request_status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only pending consultations can be approved.',
+            ], 422);
+        }
+
         // "approved" is not a valid enum value in consultation_requests.request_status.
         // Move approved requests to "assigned" so they exit the pending inbox.
         $consultation->update([
             'request_status' => 'assigned',
             'assigned_nurse_id' => auth()->id(),
+            'priority_level' => $validated['priority_level'],
         ]);
 
         return response()->json(['success' => true, 'message' => 'Consultation request approved successfully.']);
+    }
+
+    function cancelConsultation(Request $request, Consultation $consultation)
+    {
+        // Ensure the consultation belongs to the authenticated user
+        if ($consultation->patient_id !== auth()->id()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized action.'], 403);
+        }
+
+        // Update the consultation status to "cancelled"
+        $consultation->update([
+            'request_status' => 'cancelled',
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'Consultation request cancelled successfully.']);
     }
 
     // You can leave edit, update, and destroy empty or remove them if unused!

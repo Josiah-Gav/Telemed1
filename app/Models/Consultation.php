@@ -29,6 +29,7 @@ class Consultation extends Model
         'symptoms_desc',
         'online_reason',
         'request_status',
+        'priority_level',
         'file_attachments', // Added your new column here
         'rejection_reason',
     ];
@@ -51,5 +52,10 @@ class Consultation extends Model
     public function nurse()
     {
         return $this->belongsTo(User::class, 'assigned_nurse_id', 'user_id');
+    }
+
+    public function physician()
+    {
+        return $this->belongsTo(User::class, 'assigned_physician_id', 'user_id');
     }
 }

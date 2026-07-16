@@ -35,6 +35,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('nurse.consultation_history');
     });
 
+    //Physician-specific navigation pages
+    Route::prefix('physicians/{physician}')->group(function () {
+        Route::get('/dashboard', [\App\Http\Controllers\PhysicianController::class, 'dashboard'])
+            ->name('physician.dashboard');
+        Route::get('/consultation-inbox', [\App\Http\Controllers\PhysicianController::class, 'consultationInbox'])
+            ->name('physician.consultation_inbox');
+        Route::post('/consultations/{consultation}/start', [\App\Http\Controllers\PhysicianController::class, 'startConsultation'])
+            ->name('physician.consultations.start');
+        Route::get('/follow-up-requests', [\App\Http\Controllers\PhysicianController::class, 'followUpRequests'])
+            ->name('physician.follow_up_requests');
+        Route::get('/consultation-history', [\App\Http\Controllers\PhysicianController::class, 'consultationHistory'])
+            ->name('physician.consultation_history');
+        Route::get('/active_consultation', [\App\Http\Controllers\PhysicianController::class, 'activeConsultations'])
+            ->name('physician.active_consultation');
+    });
+
     // Attachment download for consultations (nurse only access validated in controller)
     Route::get('/consultations/{consultation}/attachments/{file}', [\App\Http\Controllers\AttachmentController::class, 'show'])
         ->name('consultation.attachment');
@@ -44,6 +60,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/consultations/{consultation}/approve', [ConsultationController::class, 'approveConsultation'])
     ->name('consultations.approve');
+
+    Route::post('/consultations/{consultation}/cancel', [ConsultationController::class, 'cancelConsultation'])
+    ->name('consultations.cancel');
 
 }); // --- MIDDLEWARE GROUP ENDS HERE ---
 
