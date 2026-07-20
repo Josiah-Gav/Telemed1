@@ -90,7 +90,7 @@
 
                         
                         <div class="text-right">
-                            @if ($consultation->request_status !== 'active')
+                            @if (in_array($consultation->request_status, ['pending', 'reviewed']))
                                 <p class="mb-3 text-sm text-slate-500">You can cancel this consultation request if you wish.</p>
                             <a
                                 href="javascript:void(0);"
@@ -98,6 +98,19 @@
                                 data-cancel-url="{{ route('consultations.cancel', $consultation) }}"
                                 onclick="cancelConsultation(this);"
                             > Cancel </a>
+                            @endif
+                            @if ($consultation->request_status === 'active' && $consultation->consultationSession)
+                                <a href="{{ route('consultations.messaging.show', $consultation->consultationSession) }}" class="inline-flex items-center justify-center rounded-full bg-indigo-700 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-600" aria-label="Open messaging">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="h-5 w-5" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75h6.75m-6.75 3h4.5m6.375 7.5-3.375-2.025a3.75 3.75 0 0 0-1.928-.525H6.75A3.75 3.75 0 0 1 3 13.95V7.5A3.75 3.75 0 0 1 6.75 3.75h10.5A3.75 3.75 0 0 1 21 7.5v8.25a3.75 3.75 0 0 1-1.5 3z" />
+                                    </svg>
+                                    <span class="sr-only">{{ __('Open Messaging') }}</span>
+                                </a>
+                            @endif
+                            @if ($consultation->request_status === 'completed' && $consultation->consultationSession)
+                                <a href="{{ route('consultations.messaging.show', $consultation->consultationSession) }}" class="inline-flex items-center justify-center rounded-full bg-emerald-700 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-600">
+                                    {{ __('View Chats & Assessment') }}
+                                </a>
                             @endif
                             <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800">Back to Dashboard</a>
                         </div>
@@ -110,14 +123,6 @@
     <script>
         function cancelConsultation(triggerElement) {
             const cancelUrl = triggerElement?.dataset?.cancelUrl;
-            if (triggerElement === 'active') {
-                Swal.fire(
-                    'Error!',
-                    'You cannot cancel an active consultation.',
-                    'error'
-                );
-                return;
-            }
             if (!cancelUrl) {
                 Swal.fire(
                     'Error!',

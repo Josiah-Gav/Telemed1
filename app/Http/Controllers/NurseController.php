@@ -42,7 +42,7 @@ class NurseController extends Controller
             ->get();
 
         $assignedRequests = Consultation::with(['patient', 'nurse'])
-            ->whereIn('request_status', ['assigned', 'active', 'scheduled'])
+            ->whereIn('request_status', ['reviewed', 'assigned', 'active', 'scheduled'])
             ->orderByDesc('submitted_at')
             ->get();
 

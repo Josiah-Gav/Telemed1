@@ -17,8 +17,15 @@ class DashboardController extends Controller
         switch ($user->role) {
             case 'patient':
                 $patientInfo = Auth::user();
-                $activeConsultation = Consultation::where('patient_id', auth()->id())
-                    ->whereIn('request_status', ['pending', 'assigned', 'scheduled', 'active'])
+                $activeConsultation = Consultation::with('consultationSession')
+                    ->where('patient_id', auth()->id())
+                    ->whereIn('request_status', ['pending', 'reviewed', 'assigned', 'scheduled', 'active'])
+                    ->where(function ($query) {
+                        $query->whereDoesntHave('consultationSession')
+                            ->orWhereHas('consultationSession', function ($sessionQuery) {
+                                $sessionQuery->where('consultation_status', 'active');
+                            });
+                    })
                     ->latest('submitted_at')
                     ->first();
 
@@ -54,7 +61,13 @@ class DashboardController extends Controller
         }
 
         $hasActiveConsultation = \App\Models\Consultation::where('patient_id', auth()->id())
-            ->whereIn('request_status', ['pending', 'assigned', 'scheduled', 'active'])
+            ->whereIn('request_status', ['pending', 'reviewed', 'assigned', 'scheduled', 'active'])
+            ->where(function ($query) {
+                $query->whereDoesntHave('consultationSession')
+                    ->orWhereHas('consultationSession', function ($sessionQuery) {
+                        $sessionQuery->where('consultation_status', 'active');
+                    });
+            })
             ->exists();
 
         if ($hasActiveConsultation) {

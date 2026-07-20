@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Consultation;
+use App\Models\ConsultationSession;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
@@ -33,7 +34,7 @@ class PhysicianController extends Controller
         $this->authorizePhysician($physician);
 
         $assignedConsultations = Consultation::with(['patient', 'nurse'])
-            ->where('request_status', 'assigned')
+            ->whereIn('request_status', ['reviewed', 'assigned'])
             ->orderByDesc('submitted_at')
             ->get();
 
@@ -67,10 +68,10 @@ class PhysicianController extends Controller
             ], 403);
         }
 
-        if ($consultation->request_status !== 'assigned') {
+        if (!in_array($consultation->request_status, ['reviewed', 'assigned'], true)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only assigned consultations can be started.',
+                'message' => 'Only reviewed consultations can be started.',
             ], 422);
         }
 
@@ -86,9 +87,78 @@ class PhysicianController extends Controller
             'assigned_physician_id' => Auth::id(),
         ]);
 
+        ConsultationSession::firstOrCreate(
+            ['request_id' => $consultation->request_id],
+            [
+                'physician_id' => Auth::id(),
+                'consultation_status' => 'active',
+                'assessment' => 'Initial assessment pending.',
+                'plan' => 'Plan to be documented during consultation.',
+                'recommendations' => 'Recommendations to follow after evaluation.',
+                'assigned_at' => now(),
+                'started_at' => now(),
+            ]
+        );
+
         return response()->json([
             'success' => true,
             'message' => 'Consultation started successfully.',
+        ]);
+    }
+
+    // public function approveReviewedConsultation(User $physician, Consultation $consultation)
+    // {
+    //     $this->authorizePhysician($physician);
+
+    //     if ($consultation->request_status !== 'reviewed') {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Only reviewed consultations can be approved.',
+    //         ], 422);
+    //     }
+
+    //     if ($consultation->assigned_physician_id && (int) $consultation->assigned_physician_id !== (int) Auth::id()) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'This consultation is already assigned to another physician.',
+    //         ], 422);
+    //     }
+
+    //     $consultation->update([
+    //         'request_status' => 'assigned',
+    //         'assigned_physician_id' => Auth::id(),
+    //     ]);
+
+    //     return response()->json([
+    //         'success' => true,
+    //         'message' => 'Consultation approved successfully.',
+    //     ]);
+    // }
+
+    public function rejectReviewedConsultation(Request $request, User $physician, Consultation $consultation)
+    {
+        $this->authorizePhysician($physician);
+
+        $validated = $request->validate([
+            'rejection_reason' => 'required|string|max:1000',
+        ]);
+
+        if ($consultation->request_status !== 'reviewed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only reviewed consultations can be rejected.',
+            ], 422);
+        }
+
+        $consultation->update([
+            'request_status' => 'rejected',
+            'rejection_reason' => $validated['rejection_reason'],
+            'assigned_physician_id' => Auth::id(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Consultation rejected successfully.',
         ]);
     }
 
@@ -103,7 +173,16 @@ class PhysicianController extends Controller
     {
         $this->authorizePhysician($physician);
 
-        return view('physician.consultation_history');
+        $completedConsultations = Consultation::with(['patient', 'nurse', 'consultationSession'])
+            ->where('request_status', 'completed')
+            ->where('assigned_physician_id', Auth::id())
+            ->orderByDesc('updated_at')
+            ->get();
+
+        return view('physician.consultation_history', [
+            'physician' => $physician,
+            'completedConsultations' => $completedConsultations,
+        ]);
     }
 
     public function activeConsultations(User $physician)
@@ -115,6 +194,40 @@ class PhysicianController extends Controller
             ->where('assigned_physician_id', Auth::id())
             ->orderByDesc('submitted_at')
             ->get();
+
+        // Backfill missing consultation sessions for active records created before messaging rollout.
+        $activeConsultations->each(function (Consultation $consultation) {
+            if ($consultation->request_status !== 'active') {
+                return;
+            }
+
+            $session = ConsultationSession::firstOrCreate(
+                ['request_id' => $consultation->request_id],
+                [
+                    'physician_id' => Auth::id(),
+                    'consultation_status' => 'active',
+                    'assessment' => 'Initial assessment pending.',
+                    'plan' => 'Plan to be documented during consultation.',
+                    'recommendations' => 'Recommendations to follow after evaluation.',
+                    'assigned_at' => now(),
+                    'started_at' => now(),
+                ]
+            );
+
+            if ((int) $session->physician_id !== (int) Auth::id()) {
+                $session->update([
+                    'physician_id' => Auth::id(),
+                ]);
+            }
+
+            if ($session->consultation_status !== 'active') {
+                $session->update([
+                    'consultation_status' => 'active',
+                ]);
+            }
+        });
+
+        $activeConsultations->load('consultationSession');
 
         return view('physician.active_consultation', [
             'physician' => $physician,

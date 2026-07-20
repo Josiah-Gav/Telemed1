@@ -24,10 +24,9 @@
                 'priority_level' => $consultation->priority_level,
                 'symptoms_desc' => $consultation->symptoms_desc,
                 'online_reason' => $consultation->online_reason,
+                'reject_url' => route('physician.consultations.reject_reviewed', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
                 'start_url' => route('physician.consultations.start', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
-                'file_attachments' => array_map(function ($p) use ($consultation) {
-                    return url('/consultations/' . $consultation->request_id . '/attachments/' . basename($p));
-                }, $consultation->file_attachments ?? []),
+                'file_attachments' => array_values($consultation->file_attachments ?? []),
             ];
         })->toArray();
     @endphp
@@ -133,6 +132,45 @@
                         },
                         error: (xhr) => {
                             const message = xhr.responseJSON?.message || 'Could not start the consultation.';
+                            Swal.fire('Error', message, 'error');
+                        }
+                    });
+                },
+                rejectReviewedConsultation(rejectionReason) {
+                    if (!this.selectedConsultation?.reject_url) {
+                        Swal.fire('Error', 'Unable to find the reject URL.', 'error');
+                        return;
+                    }
+
+                    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+                    if (!csrfToken) {
+                        Swal.fire('Error', 'Missing CSRF token.', 'error');
+                        return;
+                    }
+
+                    $.ajax({
+                        url: this.selectedConsultation.reject_url,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        data: JSON.stringify({
+                            rejection_reason: rejectionReason
+                        }),
+                        dataType: 'json',
+                        success: (data) => {
+                            if (data.success) {
+                                Swal.fire('Rejected!', data.message, 'success').then(() => {
+                                    window.location.reload();
+                                });
+                            } else {
+                                Swal.fire('Error', data.message || 'Unable to reject consultation.', 'error');
+                            }
+                        },
+                        error: (xhr) => {
+                            const message = xhr.responseJSON?.message || 'Unable to reject consultation.';
                             Swal.fire('Error', message, 'error');
                         }
                     });
@@ -363,7 +401,7 @@
                             <ul class="mt-2 space-y-2 text-sm text-gray-900">
                                 <template x-for="file in selectedConsultation.file_attachments" :key="file">
                                     <li class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                                        <a :href="file" target="_blank" class="font-medium text-indigo-600 hover:underline" x-text="file.split('/').pop()"></a>
+                                        <a :href="file" target="_blank" rel="noopener noreferrer" class="font-medium text-indigo-600 hover:underline" x-text="decodeURIComponent(file.split('/').pop().split('?')[0])"></a>
                                     </li>
                                 </template>
                             </ul>
@@ -376,7 +414,35 @@
                     <button type="button" @click="closeModal()" class="inline-flex justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100">
                         {{ __('Close') }}
                     </button>
-                    <template x-if="selectedConsultation?.request_status === 'assigned'">
+                    <template x-if="selectedConsultation?.request_status === 'reviewed'">
+                        <button type="button" @click="Swal.fire({
+                            title: 'Reject Consultation',
+                            text: 'Please provide a reason for rejecting this consultation.',
+                            icon: 'warning',
+                            input: 'textarea',
+                            inputPlaceholder: 'Type rejection reason here...',
+                            inputAttributes: {
+                                'aria-label': 'Type rejection reason here'
+                            },
+                            showCancelButton: true,
+                            confirmButtonColor: '#dc2626',
+                            cancelButtonColor: '#6b7280',
+                            confirmButtonText: 'Reject',
+                            inputValidator: (value) => {
+                                if (!value) {
+                                    return 'A rejection reason is required.';
+                                }
+                            }
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                rejectReviewedConsultation(result.value);
+                            }
+                        })" 
+                        class="inline-flex justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700">
+                            {{ __('Reject') }}
+                        </button>
+                    </template>
+                    <template x-if="selectedConsultation && ['reviewed', 'assigned'].includes(selectedConsultation.request_status)">
                         <button type="button" @click="Swal.fire({
                             title: 'Start Consultation',
                             text: 'Are you sure you want to start this consultation?',

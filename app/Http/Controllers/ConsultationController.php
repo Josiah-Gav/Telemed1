@@ -29,6 +29,12 @@ class ConsultationController extends Controller
     public function history()
     {
         $consultations = Consultation::where('patient_id', auth()->id())
+            ->where(function ($query) {
+                $query->whereIn('request_status', ['completed', 'rejected', 'cancelled'])
+                    ->orWhereHas('consultationSession', function ($sessionQuery) {
+                        $sessionQuery->where('consultation_status', 'completed');
+                    });
+            })
             ->latest('submitted_at')
             ->get();
 
@@ -47,7 +53,13 @@ class ConsultationController extends Controller
         }
 
         $hasActiveConsultation = Consultation::where('patient_id', auth()->id())
-            ->whereIn('request_status', ['pending', 'assigned', 'scheduled', 'active'])
+            ->whereIn('request_status', ['pending', 'reviewed', 'assigned', 'scheduled', 'active'])
+            ->where(function ($query) {
+                $query->whereDoesntHave('consultationSession')
+                    ->orWhereHas('consultationSession', function ($sessionQuery) {
+                        $sessionQuery->where('consultation_status', 'active');
+                    });
+            })
             ->exists();
 
         if ($hasActiveConsultation) {
@@ -64,7 +76,13 @@ class ConsultationController extends Controller
     {
         // 1. Enforce one active consultation request per patient
         $existingActiveConsultation = Consultation::where('patient_id', auth()->id())
-            ->whereIn('request_status', ['pending', 'assigned', 'scheduled', 'active'])
+            ->whereIn('request_status', ['pending', 'reviewed', 'assigned', 'scheduled', 'active'])
+            ->where(function ($query) {
+                $query->whereDoesntHave('consultationSession')
+                    ->orWhereHas('consultationSession', function ($sessionQuery) {
+                        $sessionQuery->where('consultation_status', 'active');
+                    });
+            })
             ->exists();
 
         if ($existingActiveConsultation) {
@@ -140,7 +158,7 @@ class ConsultationController extends Controller
     {
         abort_unless(Gate::allows('view', $consultation), 403, 'Unauthorized access.');
 
-        $consultation->load('nurse');
+        $consultation->load(['nurse', 'consultationSession']);
 
         return view('patient.consultation-details', compact('consultation'));
     }
@@ -176,9 +194,9 @@ class ConsultationController extends Controller
         }
 
         // "approved" is not a valid enum value in consultation_requests.request_status.
-        // Move approved requests to "assigned" so they exit the pending inbox.
+        // Move approved requests to "reviewed" so they exit the pending inbox.
         $consultation->update([
-            'request_status' => 'assigned',
+            'request_status' => 'reviewed',
             'assigned_nurse_id' => auth()->id(),
             'priority_level' => $validated['priority_level'],
         ]);
@@ -191,6 +209,13 @@ class ConsultationController extends Controller
         // Ensure the consultation belongs to the authenticated user
         if ($consultation->patient_id !== auth()->id()) {
             return response()->json(['success' => false, 'message' => 'Unauthorized action.'], 403);
+        }
+
+        if (!in_array($consultation->request_status, ['pending', 'reviewed'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only pending or reviewed consultations can be cancelled.',
+            ], 422);
         }
 
         // Update the consultation status to "cancelled"

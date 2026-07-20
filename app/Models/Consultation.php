@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Consultation extends Model
 {
@@ -58,4 +59,15 @@ class Consultation extends Model
     {
         return $this->belongsTo(User::class, 'assigned_physician_id', 'user_id');
     }
+
+    public function messages()
+    {
+    return $this->hasMany(Message::class, 'consultation_id')->orderBy('created_at', 'asc');
+    }
+
+    public function consultationSession(): HasOne
+    {
+        return $this->hasOne(ConsultationSession::class, 'request_id', 'request_id');
+    }
+    
 }
