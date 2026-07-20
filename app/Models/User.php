@@ -58,4 +58,19 @@ class User extends Authenticatable implements MustVerifyEmail
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $user): void {
+            if (empty($user->email_verified_at) && in_array($user->role, ['admin', 'nurse', 'physician'], true)) {
+                $user->email_verified_at = now();
+            }
+        });
+
+        static::saving(function (self $user): void {
+            if (empty($user->email_verified_at) && in_array($user->role, ['admin', 'nurse', 'physician'], true)) {
+                $user->email_verified_at = now();
+            }
+        });
+    }
 }

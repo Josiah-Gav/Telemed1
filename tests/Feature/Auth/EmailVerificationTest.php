@@ -21,7 +21,7 @@ test('email can be verified', function () {
     $verificationUrl = URL::temporarySignedRoute(
         'verification.verify',
         now()->addMinutes(60),
-        ['id' => $user->id, 'hash' => sha1($user->email)]
+        ['id' => $user->getKey(), 'hash' => sha1($user->email)]
     );
 
     $response = $this->actingAs($user)->get($verificationUrl);
@@ -37,10 +37,19 @@ test('email is not verified with invalid hash', function () {
     $verificationUrl = URL::temporarySignedRoute(
         'verification.verify',
         now()->addMinutes(60),
-        ['id' => $user->id, 'hash' => sha1('wrong-email')]
+        ['id' => $user->getKey(), 'hash' => sha1('wrong-email')]
     );
 
     $this->actingAs($user)->get($verificationUrl);
 
     expect($user->fresh()->hasVerifiedEmail())->toBeFalse();
+});
+
+test('staff roles are verified immediately when created', function () {
+    $nurse = User::factory()->create([
+        'role' => 'nurse',
+        'email_verified_at' => null,
+    ]);
+
+    expect($nurse->fresh()->hasVerifiedEmail())->toBeTrue();
 });

@@ -17,6 +17,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
 
+    Route::get('/admin/users', [\App\Http\Controllers\Admin\UserManagementController::class, 'index'])
+        ->name('admin.users.index');
+    Route::get('/admin/users/create', [\App\Http\Controllers\Admin\UserManagementController::class, 'create'])
+        ->name('admin.users.create');
+    Route::post('/admin/users', [\App\Http\Controllers\Admin\UserManagementController::class, 'store'])
+        ->name('admin.users.store');
+    Route::get('/admin/users/{user}/edit', [\App\Http\Controllers\Admin\UserManagementController::class, 'edit'])
+        ->name('admin.users.edit');
+    Route::put('/admin/users/{user}', [\App\Http\Controllers\Admin\UserManagementController::class, 'update'])
+        ->name('admin.users.update');
+
     // 2. Safe placement for your new consultation page
     Route::get('/newconsultation', [DashboardController::class, 'newconsultation'])
         ->name('newconsultation');
