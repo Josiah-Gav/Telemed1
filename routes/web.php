@@ -16,6 +16,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // 1. Role-based universal dashboard entry point
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
+    Route::get('/dashboard/active-consultation', [DashboardController::class, 'activeConsultation'])
+        ->name('dashboard.active_consultation');
 
     Route::get('/admin/users', [\App\Http\Controllers\Admin\UserManagementController::class, 'index'])
         ->name('admin.users.index');
@@ -39,6 +41,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('/consultation-inbox', [\App\Http\Controllers\NurseController::class, 'consultationInbox'])
             ->name('nurse.consultation_inbox');
+        Route::get('/consultation-inbox/refresh', [\App\Http\Controllers\NurseController::class, 'consultationInboxRefresh'])
+            ->name('nurse.consultation_inbox.refresh');
 
         Route::get('/follow-up-requests', [\App\Http\Controllers\NurseController::class, 'followUpRequests'])
             ->name('nurse.follow_up_requests');
@@ -53,6 +57,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('physician.dashboard');
         Route::get('/consultation-inbox', [\App\Http\Controllers\PhysicianController::class, 'consultationInbox'])
             ->name('physician.consultation_inbox');
+        Route::get('/consultation-inbox/refresh', [\App\Http\Controllers\PhysicianController::class, 'consultationInboxRefresh'])
+            ->name('physician.consultation_inbox.refresh');
         Route::post('/consultations/{consultation}/approve-reviewed', [\App\Http\Controllers\PhysicianController::class, 'approveReviewedConsultation'])
             ->name('physician.consultations.approve_reviewed');
         Route::post('/consultations/{consultation}/reject-reviewed', [\App\Http\Controllers\PhysicianController::class, 'rejectReviewedConsultation'])

@@ -33,23 +33,24 @@ class PhysicianController extends Controller
     {
         $this->authorizePhysician($physician);
 
-        $assignedConsultations = Consultation::with(['patient', 'nurse'])
-            ->whereIn('request_status', ['reviewed', 'assigned'])
-            ->orderByDesc('submitted_at')
-            ->get();
-
-        $normalPriorityConsultations = $assignedConsultations
-            ->where('priority_level', 'Normal')
-            ->values();
-
-        $highPriorityConsultations = $assignedConsultations
-            ->where('priority_level', 'High')
-            ->values();
+        $consultationInboxData = $this->getConsultationInboxData();
 
         return view('physician.consultation_inbox', [
             'physician' => $physician,
-            'normalPriorityConsultations' => $normalPriorityConsultations,
-            'highPriorityConsultations' => $highPriorityConsultations,
+            'normalPriorityConsultations' => $consultationInboxData['normalPriorityConsultations'],
+            'highPriorityConsultations' => $consultationInboxData['highPriorityConsultations'],
+        ]);
+    }
+
+    public function consultationInboxRefresh(User $physician)
+    {
+        $this->authorizePhysician($physician);
+
+        $consultationInboxData = $this->getConsultationInboxData();
+
+        return response()->json([
+            'normalPriorityConsultations' => $this->serializeConsultations($consultationInboxData['normalPriorityConsultations'], $physician),
+            'highPriorityConsultations' => $this->serializeConsultations($consultationInboxData['highPriorityConsultations'], $physician),
         ]);
     }
 
@@ -104,6 +105,45 @@ class PhysicianController extends Controller
             'success' => true,
             'message' => 'Consultation started successfully.',
         ]);
+    }
+
+    private function getConsultationInboxData(): array
+    {
+        $assignedConsultations = Consultation::with(['patient', 'nurse'])
+            ->whereIn('request_status', ['reviewed', 'assigned'])
+            ->orderByDesc('submitted_at')
+            ->get();
+
+        return [
+            'normalPriorityConsultations' => $assignedConsultations
+                ->where('priority_level', 'Normal')
+                ->values(),
+            'highPriorityConsultations' => $assignedConsultations
+                ->where('priority_level', 'High')
+                ->values(),
+        ];
+    }
+
+    private function serializeConsultations($consultations, User $physician): array
+    {
+        $currentPhysicianId = $physician->user_id;
+
+        return $consultations->map(function ($consultation) use ($currentPhysicianId) {
+            return [
+                'request_id' => $consultation->request_id,
+                'patient_name' => trim(optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name) ?: 'Unknown Patient',
+                'assigned_nurse_name' => trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: 'Unassigned',
+                'concern_category' => $consultation->concern_category,
+                'submitted_at' => $consultation->submitted_at ? $consultation->submitted_at->format('Y-m-d H:i') : null,
+                'request_status' => $consultation->request_status,
+                'priority_level' => $consultation->priority_level,
+                'symptoms_desc' => $consultation->symptoms_desc,
+                'online_reason' => $consultation->online_reason,
+                'reject_url' => route('physician.consultations.reject_reviewed', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
+                'start_url' => route('physician.consultations.start', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
+                'file_attachments' => array_values($consultation->file_attachments ?? []),
+            ];
+        })->values()->all();
     }
 
     // public function approveReviewedConsultation(User $physician, Consultation $consultation)
