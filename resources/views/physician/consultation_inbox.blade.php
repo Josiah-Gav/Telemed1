@@ -5,32 +5,6 @@
         </h2>
     </x-slot>
 
-    @php
-        $currentPhysicianId = auth()->user()->user_id;
-
-        $serializeConsultation = function ($consultation) use ($currentPhysicianId) {
-            return [
-                'request_id' => $consultation->request_id,
-                'patient_name' => trim(optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name) ?: 'Unknown Patient',
-                'assigned_nurse_name' => trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: 'Unassigned',
-                'concern_category' => $consultation->concern_category,
-                'submitted_at' => $consultation->submitted_at ? $consultation->submitted_at->format('Y-m-d H:i') : null,
-                'request_status' => $consultation->request_status,
-                'priority_level' => $consultation->priority_level,
-                'symptoms_desc' => $consultation->symptoms_desc,
-                'online_reason' => $consultation->online_reason,
-                'reject_url' => route('physician.consultations.reject_reviewed', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
-                'start_url' => route('physician.consultations.start', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
-                'file_attachments' => array_values($consultation->file_attachments ?? []),
-            ];
-        };
-
-        $physicianInboxData = [
-            'normalPriorityConsultations' => $normalPriorityConsultations->map($serializeConsultation)->values()->toArray(),
-            'highPriorityConsultations' => $highPriorityConsultations->map($serializeConsultation)->values()->toArray(),
-        ];
-    @endphp
-
     <script>
         window.physicianInboxData = @json($physicianInboxData);
 
@@ -129,6 +103,7 @@
                     const classes = {
                         reviewed: 'text-yellow-700 bg-yellow-100',
                         assigned: 'text-yellow-700 bg-yellow-100',
+                        scheduled: 'text-indigo-700 bg-indigo-100',
                         active: 'text-green-700 bg-green-100',
                     };
 
@@ -213,6 +188,108 @@
                         },
                         error: (xhr) => {
                             const message = xhr.responseJSON?.message || 'Could not start the consultation.';
+                            Swal.fire('Error', message, 'error');
+                        }
+                    });
+                },
+                scheduleConsultation(slotId) {
+                    if (!this.selectedConsultation?.schedule_url) {
+                        Swal.fire('Error', 'Unable to find the schedule URL.', 'error');
+                        return;
+                    }
+
+                    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+
+                    if (!csrfToken) {
+                        Swal.fire('Error', 'Missing CSRF token.', 'error');
+                        return;
+                    }
+
+                    $.ajax({
+                        url: this.selectedConsultation.schedule_url,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        data: JSON.stringify({
+                            physician_id: {{ $physician->user_id }},
+                            slot_id: Number(slotId)
+                        }),
+                        dataType: 'json',
+                        success: (data) => {
+                            if (data.success) {
+                                Swal.fire('Scheduled!', data.message, 'success').then(() => {
+                                    this.poll();
+                                });
+                            } else {
+                                Swal.fire('Error', data.message || 'Unable to schedule consultation.', 'error');
+                            }
+                        },
+                        error: (xhr) => {
+                            const message = xhr.responseJSON?.message || 'Unable to schedule consultation.';
+                            Swal.fire('Error', message, 'error');
+                        }
+                    });
+                },
+                promptScheduleSlot() {
+                    if (!this.selectedConsultation?.available_slots_url) {
+                        Swal.fire('Error', 'Unable to load available slots.', 'error');
+                        return;
+                    }
+
+                    $.ajax({
+                        url: this.selectedConsultation.available_slots_url,
+                        type: 'GET',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        dataType: 'json',
+                        success: (data) => {
+                            const slots = Array.isArray(data?.slots) ? data.slots : [];
+
+                            if (!slots.length) {
+                                Swal.fire({
+                                    title: 'No Available Slots Today',
+                                    text: 'Create available slots for today first.',
+                                    icon: 'info',
+                                    showCancelButton: true,
+                                    confirmButtonText: 'Go To Schedule Slots',
+                                    cancelButtonText: 'Close'
+                                }).then((result) => {
+                                    if (result.isConfirmed && data?.manage_schedule_url) {
+                                        window.location.href = data.manage_schedule_url;
+                                    }
+                                });
+                                return;
+                            }
+
+                            const options = slots.reduce((carry, slot) => {
+                                carry[String(slot.slot_id)] = `${slot.label} (${slot.slot_date})`;
+                                return carry;
+                            }, {});
+
+                            Swal.fire({
+                                title: 'Select Schedule Slot',
+                                input: 'select',
+                                inputOptions: options,
+                                inputPlaceholder: 'Select an available slot',
+                                showCancelButton: true,
+                                confirmButtonText: 'Assign Slot',
+                                inputValidator: (value) => {
+                                    if (!value) {
+                                        return 'Please select a slot.';
+                                    }
+                                }
+                            }).then((result) => {
+                                if (result.isConfirmed) {
+                                    this.scheduleConsultation(result.value);
+                                }
+                            });
+                        },
+                        error: (xhr) => {
+                            const message = xhr.responseJSON?.message || 'Unable to load available slots.';
                             Swal.fire('Error', message, 'error');
                         }
                     });
@@ -406,6 +483,12 @@
                         </div>
                     </div>
 
+                    <div class="rounded-xl border border-gray-200 bg-indigo-50 p-3" x-show="selectedConsultation?.scheduled_slot" x-cloak>
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-indigo-600">{{ __('Scheduled Slot') }}</p>
+                        <p class="mt-2 text-sm font-semibold text-indigo-900" x-text="selectedConsultation?.scheduled_slot ? `${selectedConsultation.scheduled_slot.slot_date} ${selectedConsultation.scheduled_slot.label}` : ''"></p>
+                        <p class="mt-1 text-xs text-indigo-700" x-text="selectedConsultation?.can_start_message || ''"></p>
+                    </div>
+
                     <div class="rounded-xl border border-gray-200 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Concern Category') }}</p>
                         <p class="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700" x-text="selectedConsultation?.concern_category ?? '{{ __('N/A') }}'"></p>
@@ -471,11 +554,18 @@
                             {{ __('Reject') }}
                         </button>
                     </template>
-                    <template x-if="selectedConsultation && ['reviewed', 'assigned'].includes(selectedConsultation.request_status)">
+                    <template x-if="selectedConsultation && ['reviewed', 'assigned', 'scheduled'].includes(selectedConsultation.request_status)">
+                        <button type="button" @click="promptScheduleSlot()"
+                        class="inline-flex justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700">
+                            {{ __('Schedule') }}
+                        </button>
+                    </template>
+                    <template x-if="selectedConsultation && ['reviewed', 'assigned', 'scheduled'].includes(selectedConsultation.request_status)">
                         <button type="button" @click="Swal.fire({
                             title: 'Start Consultation',
-                            text: 'Are you sure you want to start this consultation?',
+                            text: selectedConsultation?.can_start ? 'Are you sure you want to start this consultation?' : (selectedConsultation?.can_start_message || 'You cannot start this consultation yet.'),
                             icon: 'question',
+                            showConfirmButton: selectedConsultation?.can_start,
                             showCancelButton: true,
                             confirmButtonText: 'Yes, start it!',
                             cancelButtonText: 'Cancel'
@@ -484,6 +574,8 @@
                                 startConsultation();
                             }
                         })"
+                        :disabled="!selectedConsultation?.can_start"
+                        :class="selectedConsultation?.can_start ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-400 cursor-not-allowed'"
                         class="inline-flex justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
                             {{ __('Start') }}
                         </button>

@@ -17,6 +17,7 @@ class ConsultationSession extends Model
     protected $fillable = [
         'request_id',
         'physician_id',
+        'slot_id',
         'consultation_status',
         'assessment',
         'plan',
@@ -51,6 +52,11 @@ class ConsultationSession extends Model
     public function physician(): BelongsTo
     {
         return $this->belongsTo(User::class, 'physician_id', 'user_id');
+    }
+
+    public function slot(): BelongsTo
+    {
+        return $this->belongsTo(ScheduleSlot::class, 'slot_id', 'slot_id');
     }
 
     public function messages(): HasMany

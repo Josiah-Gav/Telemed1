@@ -39,6 +39,11 @@
                 'session' => $activeConsultation->consultationSession ? [
                     'id' => $activeConsultation->consultationSession->id,
                     'consultation_status' => $activeConsultation->consultationSession->consultation_status,
+                    'scheduled_slot' => $activeConsultation->consultationSession->slot ? [
+                        'slot_date' => $activeConsultation->consultationSession->slot->slot_date?->format('M d, Y') ?? (string) $activeConsultation->consultationSession->slot->slot_date,
+                        'start_time' => $activeConsultation->consultationSession->slot->start_time,
+                        'end_time' => $activeConsultation->consultationSession->slot->end_time,
+                    ] : null,
                     'has_clinical_documentation' => $activeConsultation->consultationSession->hasClinicalDocumentation(),
                     'clinical_badge_class' => $activeConsultation->consultationSession->hasClinicalDocumentation() ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
                     'clinical_label' => $activeConsultation->consultationSession->hasClinicalDocumentation() ? __('Assessment ready') : __('Assessment pending'),
@@ -176,6 +181,10 @@
                                 <div class="rounded-2xl border border-gray-200 bg-slate-50 p-4">
                                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
                                     <p class="mt-2 text-sm font-semibold text-slate-900" x-text="consultation?.status_label"></p>
+                                </div>
+                                <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:col-span-2" x-show="consultation?.request_status === 'scheduled' && consultation?.session?.scheduled_slot" x-cloak>
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">Scheduled Appointment</p>
+                                    <p class="mt-2 text-sm font-semibold text-blue-900" x-text="consultation?.session?.scheduled_slot ? `${consultation.session.scheduled_slot.slot_date} ${consultation.session.scheduled_slot.start_time} - ${consultation.session.scheduled_slot.end_time}` : ''"></p>
                                 </div>
                             </div>
                         </div>

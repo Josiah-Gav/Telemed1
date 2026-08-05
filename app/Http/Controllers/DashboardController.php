@@ -61,7 +61,7 @@ class DashboardController extends Controller
             ->where(function ($query) {
                 $query->whereDoesntHave('consultationSession')
                     ->orWhereHas('consultationSession', function ($sessionQuery) {
-                        $sessionQuery->where('consultation_status', 'active');
+                        $sessionQuery->whereIn('consultation_status', ['scheduled', 'active']);
                     });
             })
             ->exists();
@@ -75,13 +75,13 @@ class DashboardController extends Controller
 
     private function getPatientActiveConsultation(int $patientId): ?Consultation
     {
-        return Consultation::with('consultationSession')
+        return Consultation::with('consultationSession.slot')
             ->where('patient_id', $patientId)
             ->whereIn('request_status', ['pending', 'reviewed', 'assigned', 'scheduled', 'active'])
             ->where(function ($query) {
                 $query->whereDoesntHave('consultationSession')
                     ->orWhereHas('consultationSession', function ($sessionQuery) {
-                        $sessionQuery->where('consultation_status', 'active');
+                        $sessionQuery->whereIn('consultation_status', ['scheduled', 'active']);
                     });
             })
             ->latest('submitted_at')
@@ -127,6 +127,11 @@ class DashboardController extends Controller
             'session' => $consultationSession ? [
                 'id' => $consultationSession->id,
                 'consultation_status' => $consultationSession->consultation_status,
+                'scheduled_slot' => $consultationSession->slot ? [
+                    'slot_date' => $consultationSession->slot->slot_date?->format('M d, Y') ?? (string) $consultationSession->slot->slot_date,
+                    'start_time' => $consultationSession->slot->start_time,
+                    'end_time' => $consultationSession->slot->end_time,
+                ] : null,
                 'has_clinical_documentation' => $consultationSession->hasClinicalDocumentation(),
                 'clinical_badge_class' => $consultationSession->hasClinicalDocumentation() ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
                 'clinical_label' => $consultationSession->hasClinicalDocumentation() ? __('Assessment ready') : __('Assessment pending'),

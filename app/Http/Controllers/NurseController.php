@@ -79,12 +79,12 @@ class NurseController extends Controller
     {
         $currentNurseId = (int) $nurse->user_id;
 
-        $pendingRequests = Consultation::with('patient')
+        $pendingRequests = Consultation::with(['patient', 'physician'])
             ->where('request_status', 'pending')
             ->orderByDesc('submitted_at')
             ->get();
 
-        $assignedRequests = Consultation::with(['patient', 'nurse'])
+        $assignedRequests = Consultation::with(['patient', 'nurse', 'physician'])
             ->whereIn('request_status', ['reviewed', 'assigned', 'active', 'scheduled'])
             ->orderByDesc('submitted_at')
             ->get();
@@ -112,6 +112,8 @@ class NurseController extends Controller
                 'request_status' => $request->request_status,
                 'assigned_nurse_id' => $request->assigned_nurse_id,
                 'assigned_nurse_name' => trim(optional($request->nurse)->first_name . ' ' . optional($request->nurse)->last_name) ?: null,
+                'assigned_physician_id' => $request->assigned_physician_id,
+                'assigned_physician_name' => trim(optional($request->physician)->first_name . ' ' . optional($request->physician)->last_name) ?: null,
                 'priority_level' => $request->priority_level,
                 'symptoms_desc' => $request->symptoms_desc,
                 'online_reason' => $request->online_reason,

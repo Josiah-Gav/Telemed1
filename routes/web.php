@@ -65,12 +65,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('physician.consultations.reject_reviewed');
         Route::post('/consultations/{consultation}/start', [\App\Http\Controllers\PhysicianController::class, 'startConsultation'])
             ->name('physician.consultations.start');
+        Route::get('/consultations/{consultation}/available-slots', [\App\Http\Controllers\PhysicianController::class, 'availableScheduleSlotsForConsultation'])
+            ->name('physician.consultations.available_slots');
+        Route::post('/consultations/{consultation}/schedule', [\App\Http\Controllers\PhysicianController::class, 'scheduleConsultation'])
+            ->name('physician.consultations.schedule');
         Route::get('/follow-up-requests', [\App\Http\Controllers\PhysicianController::class, 'followUpRequests'])
             ->name('physician.follow_up_requests');
         Route::get('/consultation-history', [\App\Http\Controllers\PhysicianController::class, 'consultationHistory'])
             ->name('physician.consultation_history');
         Route::get('/active_consultation', [\App\Http\Controllers\PhysicianController::class, 'activeConsultations'])
             ->name('physician.active_consultation');
+        Route::get('/scheduled_consultation', [\App\Http\Controllers\PhysicianController::class, 'scheduledConsultations'])
+            ->name('physician.scheduled_consultation');
+        Route::get('/scheduled_consultation/slots', [\App\Http\Controllers\PhysicianController::class, 'scheduledConsultationSlots'])
+            ->name('physician.scheduled_consultation.slots');
+        Route::post('/scheduled_consultation/generate', [\App\Http\Controllers\PhysicianController::class, 'generateScheduleSlots'])
+            ->name('physician.scheduled_consultation.generate');
+        Route::post('/scheduled_consultation/save', [\App\Http\Controllers\PhysicianController::class, 'saveScheduleSlots'])
+            ->name('physician.scheduled_consultation.save');
     });
 
     // Attachment download for consultations (nurse only access validated in controller)

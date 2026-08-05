@@ -57,7 +57,7 @@ class ConsultationController extends Controller
             ->where(function ($query) {
                 $query->whereDoesntHave('consultationSession')
                     ->orWhereHas('consultationSession', function ($sessionQuery) {
-                        $sessionQuery->where('consultation_status', 'active');
+                        $sessionQuery->whereIn('consultation_status', ['scheduled', 'active']);
                     });
             })
             ->exists();
@@ -80,7 +80,7 @@ class ConsultationController extends Controller
             ->where(function ($query) {
                 $query->whereDoesntHave('consultationSession')
                     ->orWhereHas('consultationSession', function ($sessionQuery) {
-                        $sessionQuery->where('consultation_status', 'active');
+                        $sessionQuery->whereIn('consultation_status', ['scheduled', 'active']);
                     });
             })
             ->exists();
@@ -158,7 +158,7 @@ class ConsultationController extends Controller
     {
         abort_unless(Gate::allows('view', $consultation), 403, 'Unauthorized access.');
 
-        $consultation->load(['nurse', 'consultationSession']);
+        $consultation->load(['nurse', 'consultationSession.slot']);
 
         return view('patient.consultation-details', compact('consultation'));
     }

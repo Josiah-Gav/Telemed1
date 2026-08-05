@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -234,14 +235,39 @@ class ConsultationMessageController extends Controller
         $consultationRequest = $session->request;
         abort_unless($consultationRequest, 404);
 
-        $session->forceFill([
-            'consultation_status' => 'completed',
-            'completed_at' => now(),
-        ])->save();
+        DB::transaction(function () use ($session) {
+            $lockedSession = ConsultationSession::query()
+                ->whereKey($session->id)
+                ->lockForUpdate()
+                ->first();
 
-        $consultationRequest->update([
-            'request_status' => 'completed',
-        ]);
+            abort_unless($lockedSession, 404);
+
+            $lockedRequest = $lockedSession->request()->lockForUpdate()->first();
+            abort_unless($lockedRequest, 404);
+
+            $lockedSession->forceFill([
+                'consultation_status' => 'completed',
+                'completed_at' => now(),
+            ])->save();
+
+            $lockedRequest->update([
+                'request_status' => 'completed',
+            ]);
+
+            if ($lockedSession->slot_id) {
+                $lockedSlot = $lockedSession->slot()->lockForUpdate()->first();
+
+                if ($lockedSlot && in_array($lockedSlot->status, ['booked', 'missed'], true)) {
+                    $lockedSlot->update([
+                        'status' => 'completed',
+                    ]);
+                }
+            }
+        });
+
+        $session->refresh();
+        $consultationRequest = $session->request;
 
         return response()->json([
             'success' => true,

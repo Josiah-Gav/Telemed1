@@ -44,6 +44,9 @@
                         <x-nav-link :href="route('physician.active_consultation', ['physician' => Auth::user()])" :active="request()->routeIs('physician.active_consultation')">
                             {{ __('Active Consultations') }}
                         </x-nav-link>
+                        <x-nav-link :href="route('physician.scheduled_consultation', ['physician' => Auth::user()])" :active="request()->routeIs('physician.scheduled_consultation')">
+                            {{ __('Scheduled Consultations') }}
+                        </x-nav-link>
                     @elseif(Auth::check() && Auth::user()->role === 'admin')
                         <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                             {{ __('Dashboard') }}

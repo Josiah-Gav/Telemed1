@@ -16,6 +16,8 @@
                 'request_status' => $request->request_status,
                 'assigned_nurse_id' => $request->assigned_nurse_id,
                 'assigned_nurse_name' => trim(optional($request->nurse)->first_name . ' ' . optional($request->nurse)->last_name) ?: null,
+                'assigned_physician_id' => $request->assigned_physician_id,
+                'assigned_physician_name' => trim(optional($request->physician)->first_name . ' ' . optional($request->physician)->last_name) ?: null,
                 'priority_level' => $request->priority_level,
                 'symptoms_desc' => $request->symptoms_desc,
                 'online_reason' => $request->online_reason,
@@ -401,6 +403,24 @@
                         </div>
                     </div>
 
+                    <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
+                        <div>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Request Status') }}</p>
+                            <p class="mt-1 inline-flex items-center rounded-full px-2 py-1 text-sm font-semibold" :class="requestStatusBadgeClass(selectedRequest?.request_status)" x-text="selectedRequest?.request_status ? selectedRequest.request_status.charAt(0).toUpperCase() + selectedRequest.request_status.slice(1) : '{{ __('N/A') }}'"></p>
+                        </div>
+                        <div>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Priority Level') }}</p>
+                            <p class="mt-1 inline-flex items-center rounded-full px-2 py-1 text-sm font-semibold" :class="priorityBadgeClass(selectedRequest?.priority_level)" x-text="selectedRequest?.priority_level ? selectedRequest.priority_level.charAt(0).toUpperCase() + selectedRequest.priority_level.slice(1) : '{{ __('N/A') }}'"></p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
+                    <div>
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Assigned Physician') }}</p>
+                        <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedRequest?.assigned_physician_name || '{{ __('Unassigned') }}'"></p>
+                    </div>
+                    </div>
+                    
                     <div class="rounded-xl border border-gray-200 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Concern Category') }}</p>
                         <p class="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700" x-text="selectedRequest?.concern_category ?? '{{ __('N/A') }}'"></p>
