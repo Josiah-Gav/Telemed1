@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\ConsultationMessageController;
+use App\Http\Controllers\FollowUpRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -34,6 +35,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/newconsultation', [DashboardController::class, 'newconsultation'])
         ->name('newconsultation');
 
+    Route::get('/follow-up-list', [FollowUpRequestController::class, 'index'])
+        ->name('patient.follow_up_list');
+    Route::post('/consultation-sessions/{session}/follow-up-requests', [FollowUpRequestController::class, 'store'])
+        ->name('patient.follow_up_requests.store');
+
     // Nurse-specific navigation pages
     Route::prefix('nurses/{nurse}')->group(function () {
         Route::get('/dashboard', [\App\Http\Controllers\NurseController::class, 'dashboard'])
@@ -46,6 +52,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('/follow-up-requests', [\App\Http\Controllers\NurseController::class, 'followUpRequests'])
             ->name('nurse.follow_up_requests');
+        Route::post('/follow-up-requests/{followUpRequest}/forward', [\App\Http\Controllers\NurseController::class, 'forwardFollowUpRequest'])
+            ->name('nurse.follow_up_requests.forward');
+        Route::post('/follow-up-requests/{followUpRequest}/reject', [\App\Http\Controllers\NurseController::class, 'rejectFollowUpRequest'])
+            ->name('nurse.follow_up_requests.reject');
 
         Route::get('/consultation-history', [\App\Http\Controllers\NurseController::class, 'consultationHistory'])
             ->name('nurse.consultation_history');
@@ -71,6 +81,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('physician.consultations.schedule');
         Route::get('/follow-up-requests', [\App\Http\Controllers\PhysicianController::class, 'followUpRequests'])
             ->name('physician.follow_up_requests');
+        Route::get('/follow-up-requests/{followUpRequest}/available-slots', [\App\Http\Controllers\PhysicianController::class, 'availableSlotsForFollowUpRequest'])
+            ->name('physician.follow_up_requests.available_slots');
+        Route::post('/follow-up-requests/{followUpRequest}/decide', [\App\Http\Controllers\PhysicianController::class, 'decideFollowUpRequest'])
+            ->name('physician.follow_up_requests.decide');
+        Route::post('/consultation-sessions/{session}/follow-up', [\App\Http\Controllers\PhysicianController::class, 'createPhysicianFollowUp'])
+            ->name('physician.follow_up.create');
         Route::get('/consultation-history', [\App\Http\Controllers\PhysicianController::class, 'consultationHistory'])
             ->name('physician.consultation_history');
         Route::get('/active_consultation', [\App\Http\Controllers\PhysicianController::class, 'activeConsultations'])

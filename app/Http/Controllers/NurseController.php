@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Consultation;
+use App\Models\FollowUpRequest;
 use App\Models\User;
 
 class NurseController extends Controller
@@ -61,9 +62,91 @@ class NurseController extends Controller
     {
         $this->authorizeNurse($nurse);
 
+        $pendingRequests = FollowUpRequest::with(['patient', 'consultation.request', 'consultation.physician'])
+            ->where('status', 'pending')
+            ->orderByDesc('created_at')
+            ->get();
+
         return view('nurse.follow_up_requests', [
             'nurse' => $nurse,
+            'pendingRequests' => $pendingRequests,
         ]);
+    }
+
+    public function forwardFollowUpRequest(Request $request, User $nurse, FollowUpRequest $followUpRequest)
+    {
+        $this->authorizeNurse($nurse);
+
+        $validated = $request->validate([
+            'decision_notes' => 'nullable|string|max:2000',
+        ]);
+
+        if ($followUpRequest->status !== 'pending') {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending follow-up requests can be forwarded.',
+                ], 422);
+            }
+
+            return back()->withErrors(['follow_up_request' => 'Only pending follow-up requests can be forwarded.']);
+        }
+
+        $followUpRequest->update([
+            'status' => 'forwarded',
+            'reviewed_by_nurse_id' => Auth::id(),
+            'reviewed_at' => now(),
+            'decision_notes' => $validated['decision_notes'] ?? null,
+        ]);
+
+        // TODO: Notify physician
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Follow-up request forwarded to physician review.',
+            ]);
+        }
+
+        return back()->with('status', 'Follow-up request forwarded to physician review.');
+    }
+
+    public function rejectFollowUpRequest(Request $request, User $nurse, FollowUpRequest $followUpRequest)
+    {
+        $this->authorizeNurse($nurse);
+
+        $validated = $request->validate([
+            'decision_notes' => 'required|string|max:2000',
+        ]);
+
+        if ($followUpRequest->status !== 'pending') {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending follow-up requests can be rejected.',
+                ], 422);
+            }
+
+            return back()->withErrors(['follow_up_request' => 'Only pending follow-up requests can be rejected.']);
+        }
+
+        $followUpRequest->update([
+            'status' => 'rejected',
+            'reviewed_by_nurse_id' => Auth::id(),
+            'reviewed_at' => now(),
+            'decision_notes' => $validated['decision_notes'],
+        ]);
+
+        // TODO: Notify patient
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Follow-up request rejected.',
+            ]);
+        }
+
+        return back()->with('status', 'Follow-up request rejected.');
     }
 
     public function consultationHistory(User $nurse)

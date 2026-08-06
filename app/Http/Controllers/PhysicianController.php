@@ -6,6 +6,7 @@ use App\Http\Requests\GenerateScheduleSlotsRequest;
 use App\Http\Requests\StoreScheduleSlotsRequest;
 use App\Models\Consultation;
 use App\Models\ConsultationSession;
+use App\Models\FollowUpRequest;
 use App\Models\ScheduleSlot;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -390,7 +391,201 @@ class PhysicianController extends Controller
     {
         $this->authorizePhysician($physician);
 
-        return view('physician.follow_up_request');
+        $forwardedRequests = FollowUpRequest::with(['patient', 'consultation.request', 'consultation.physician'])
+            ->where('status', 'forwarded')
+            ->orderByDesc('reviewed_at')
+            ->get();
+
+        return view('physician.follow_up_request', [
+            'physician' => $physician,
+            'forwardedRequests' => $forwardedRequests,
+        ]);
+    }
+
+    public function decideFollowUpRequest(Request $request, User $physician, FollowUpRequest $followUpRequest)
+    {
+        $this->authorizePhysician($physician);
+
+        $validated = $request->validate([
+            'decision' => 'required|in:approved,rejected',
+            'mode' => 'nullable|in:immediate,scheduled',
+            'slot_id' => 'nullable|integer',
+            'decision_notes' => 'required|string|max:2000',
+        ]);
+
+        if ($followUpRequest->status !== 'forwarded') {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only forwarded follow-up requests can be decided.',
+                ], 422);
+            }
+
+            return back()->withErrors(['follow_up_request' => 'Only forwarded follow-up requests can be decided.']);
+        }
+
+        if ($validated['decision'] === 'rejected') {
+            $followUpRequest->update([
+                'status' => 'rejected',
+                'decided_by_physician_id' => Auth::id(),
+                'decided_at' => now(),
+                'decision_notes' => $validated['decision_notes'],
+            ]);
+
+            // TODO: Notify patient
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Follow-up request rejected.',
+                ]);
+            }
+
+            return back()->with('status', 'Follow-up request rejected.');
+        }
+
+        $mode = $validated['mode'] ?? null;
+        if (!in_array($mode, ['immediate', 'scheduled'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Physician must choose immediate start or scheduled slot when approving.',
+                ], 422);
+            }
+
+            return back()->withErrors(['mode' => 'Physician must choose immediate start or scheduled slot when approving.']);
+        }
+
+        try {
+            DB::transaction(function () use ($followUpRequest, $validated, $mode) {
+                $this->createFollowUpConsultationFromSource(
+                    $followUpRequest->consultation,
+                    Auth::id(),
+                    $mode,
+                    $validated['slot_id'] ?? null
+                );
+
+                $followUpRequest->update([
+                    'status' => 'approved',
+                    'decided_by_physician_id' => Auth::id(),
+                    'decided_at' => now(),
+                    'decision_notes' => $validated['decision_notes'],
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                ], 422);
+            }
+
+            return back()->withErrors(['follow_up_request' => $e->getMessage()]);
+        }
+
+        // TODO: Notify patient
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Follow-up request approved and consultation created.',
+            ]);
+        }
+
+        return back()->with('status', 'Follow-up request approved and consultation created.');
+    }
+
+    public function availableSlotsForFollowUpRequest(User $physician, FollowUpRequest $followUpRequest): JsonResponse
+    {
+        $this->authorizePhysician($physician);
+
+        if ($followUpRequest->status !== 'forwarded') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only forwarded follow-up requests can be scheduled.',
+            ], 422);
+        }
+
+        $today = now()->toDateString();
+
+        $slots = ScheduleSlot::query()
+            ->where('physician_id', $physician->user_id)
+            ->whereDate('slot_date', '>=', $today)
+            ->where('status', 'available')
+            ->orderBy('slot_date')
+            ->orderBy('start_time')
+            ->get()
+            ->filter(function (ScheduleSlot $slot) {
+                return !$this->isScheduleSlotInPast($slot);
+            })
+            ->map(function (ScheduleSlot $slot) {
+                $start = CarbonImmutable::createFromFormat('H:i:s', $slot->start_time);
+                $end = CarbonImmutable::createFromFormat('H:i:s', $slot->end_time);
+
+                return [
+                    'slot_id' => $slot->slot_id,
+                    'slot_date' => $slot->slot_date?->format('Y-m-d') ?? $slot->slot_date,
+                    'start_time' => $slot->start_time,
+                    'end_time' => $slot->end_time,
+                    'label' => $start->format('g:i A') . ' - ' . $end->format('g:i A'),
+                ];
+            })
+            ->values()
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'slots' => $slots,
+            'no_slots' => count($slots) === 0,
+            'manage_schedule_url' => route('physician.scheduled_consultation', ['physician' => $physician->user_id]),
+        ]);
+    }
+
+    public function createPhysicianFollowUp(Request $request, User $physician, ConsultationSession $session): JsonResponse
+    {
+        $this->authorizePhysician($physician);
+
+        if ((int) $session->physician_id !== (int) Auth::id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only the assigned physician can create a follow-up for this consultation.',
+            ], 403);
+        }
+
+        if ($session->consultation_status !== 'completed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Follow-up can only be created from a completed consultation.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'mode' => 'required|in:immediate,scheduled',
+            'slot_id' => 'nullable|integer',
+        ]);
+
+        try {
+            DB::transaction(function () use ($session, $validated) {
+                $this->createFollowUpConsultationFromSource(
+                    $session,
+                    Auth::id(),
+                    $validated['mode'],
+                    $validated['slot_id'] ?? null
+                );
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        // TODO: Notify patient
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Follow-up consultation created successfully.',
+        ]);
     }
 
     public function consultationHistory(User $physician)
@@ -854,6 +1049,79 @@ class PhysicianController extends Controller
             'can_start' => false,
             'can_start_message' => 'Start will be available at ' . $canStartAt->format('M d, Y h:i A') . '.',
         ];
+    }
+
+    private function createFollowUpConsultationFromSource(ConsultationSession $sourceSession, int $physicianId, string $mode, ?int $slotId = null): Consultation
+    {
+        $sourceSession->loadMissing('request');
+
+        if (!$sourceSession->request) {
+            throw new \RuntimeException('Source consultation request was not found.');
+        }
+
+        $existingActiveFollowUp = Consultation::query()
+            ->where('type', 'follow_up')
+            ->where('parent_consultation_id', $sourceSession->id)
+            ->whereIn('request_status', ['pending', 'scheduled', 'active'])
+            ->exists();
+
+        if ($existingActiveFollowUp) {
+            throw new \RuntimeException('An active follow-up consultation already exists for this consultation.');
+        }
+
+        $newRequestStatus = $mode === 'immediate' ? 'active' : 'scheduled';
+
+        $newConsultation = Consultation::create([
+            'patient_id' => $sourceSession->request->patient_id,
+            'assigned_physician_id' => $physicianId,
+            'assigned_nurse_id' => $sourceSession->request->assigned_nurse_id,
+            'type' => 'follow_up',
+            'parent_consultation_id' => $sourceSession->id,
+            'concern_category' => $sourceSession->request->concern_category,
+            'symptoms_desc' => $sourceSession->request->symptoms_desc,
+            'online_reason' => $sourceSession->request->online_reason,
+            'request_status' => $newRequestStatus,
+            'priority_level' => $sourceSession->request->priority_level,
+            'file_attachments' => $sourceSession->request->file_attachments,
+        ]);
+
+        $newSessionData = [
+            'request_id' => $newConsultation->request_id,
+            'physician_id' => $physicianId,
+            'consultation_status' => $mode === 'immediate' ? 'active' : 'scheduled',
+            'assessment' => 'Initial assessment pending.',
+            'plan' => 'Plan to be documented during consultation.',
+            'recommendations' => 'Recommendations to follow after evaluation.',
+            'assigned_at' => now(),
+            'started_at' => $mode === 'immediate' ? now() : null,
+        ];
+
+        if ($mode === 'scheduled') {
+            if (!$slotId) {
+                throw new \RuntimeException('A schedule slot is required when approving a scheduled follow-up.');
+            }
+
+            $slot = ScheduleSlot::query()
+                ->where('slot_id', $slotId)
+                ->where('physician_id', $physicianId)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$slot || $slot->status !== 'available') {
+                throw new \RuntimeException('Selected slot is no longer available.');
+            }
+
+            if ($this->isScheduleSlotInPast($slot)) {
+                throw new \RuntimeException('Selected slot is already in the past. Please choose a future slot.');
+            }
+
+            $slot->update(['status' => 'booked']);
+            $newSessionData['slot_id'] = $slot->slot_id;
+        }
+
+        ConsultationSession::create($newSessionData);
+
+        return $newConsultation;
     }
 
     private function isScheduleSlotInPast(ScheduleSlot $slot): bool

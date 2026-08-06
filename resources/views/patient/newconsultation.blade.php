@@ -293,7 +293,7 @@
                                     </div>
                                 </button>
 
-                                <button type="button" @click="selectedType = 'followup'; currentStep = 2" :class="['group flex items-center justify-between rounded-3xl p-6 text-left transition', selectedType === 'followup' ? 'border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50']">
+                                <button type="button" @click="window.location.href = '{{ route('patient.follow_up_list') }}'" :class="['group flex items-center justify-between rounded-3xl p-6 text-left transition', selectedType === 'followup' ? 'border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50']">
                                     <div>
                                         <div :class="['flex items-center gap-3', selectedType === 'followup' ? 'text-blue-600' : 'text-gray-500']">
                                             <div :class="['rounded-2xl p-3', selectedType === 'followup' ? 'bg-white' : 'bg-gray-100']">
@@ -326,7 +326,7 @@
                                     </div>
                                 </div>
                                 <div class="mt-4 text-right">
-                                    <a href="#" class="inline-flex items-center rounded-full border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Go to My Consultation</a>
+                                    <a href="{{ route('patient.follow_up_list') }}" class="inline-flex items-center rounded-full border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Go to Follow-up List</a>
                                 </div>
                             </div>
                         </div>

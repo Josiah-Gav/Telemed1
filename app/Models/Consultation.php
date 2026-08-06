@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Consultation extends Model
 {
@@ -26,6 +27,8 @@ class Consultation extends Model
         'patient_id',
         'assigned_physician_id',
         'assigned_nurse_id',
+        'type',
+        'parent_consultation_id',
         'concern_category',
         'symptoms_desc',
         'online_reason',
@@ -68,6 +71,11 @@ class Consultation extends Model
     public function consultationSession(): HasOne
     {
         return $this->hasOne(ConsultationSession::class, 'request_id', 'request_id');
+    }
+
+    public function parentConsultation(): BelongsTo
+    {
+        return $this->belongsTo(ConsultationSession::class, 'parent_consultation_id', 'id');
     }
     
 }

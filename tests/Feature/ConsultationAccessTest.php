@@ -30,7 +30,6 @@ it('allows a patient to view only their own consultation details', function () {
         ],
         'file_attachments' => null,
         'request_status' => 'pending',
-        'preffered_consultation_type' => 'video',
     ]);
 
     $this->actingAs($owner)

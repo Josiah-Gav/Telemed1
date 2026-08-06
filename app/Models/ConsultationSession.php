@@ -64,6 +64,11 @@ class ConsultationSession extends Model
         return $this->hasMany(Message::class, 'consultation_id', 'id')->orderBy('created_at', 'asc');
     }
 
+    public function followUpRequests(): HasMany
+    {
+        return $this->hasMany(FollowUpRequest::class, 'consultation_id', 'id');
+    }
+
     public function hasMeaningfulAssessment(): bool
     {
         return $this->hasMeaningfulText($this->assessment, [
