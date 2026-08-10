@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Consultation;
+use App\Models\FollowUpRequest;
 
 class DashboardController extends Controller
 {
@@ -19,8 +20,10 @@ class DashboardController extends Controller
                 $patientInfo = Auth::user();
                 $activeConsultation = $this->getPatientActiveConsultation($patientInfo->user_id);
                 $activeConsultationSummary = $this->getConsultationSummary($activeConsultation);
+                $followUpStatus = $this->getPatientFollowUpStatus($patientInfo->user_id);
+                $physicianFollowUp = $this->getPhysicianInitiatedFollowUp($patientInfo->user_id);
 
-                return view('patient.dashboard', compact('patientInfo', 'activeConsultation', 'activeConsultationSummary'));
+                return view('patient.dashboard', compact('patientInfo', 'activeConsultation', 'activeConsultationSummary', 'followUpStatus', 'physicianFollowUp'));
             case 'physician':
                 return view('physician.dashboard');
             case 'nurse':
@@ -41,9 +44,11 @@ class DashboardController extends Controller
         }
 
         $consultation = $this->getPatientActiveConsultation($patient->user_id);
+        $physicianFollowUp = $this->getPhysicianInitiatedFollowUp($patient->user_id);
 
         return response()->json([
             'consultation' => $this->serializePatientConsultation($consultation),
+            'physician_follow_up' => $physicianFollowUp,
         ]);
     }
     
@@ -104,6 +109,88 @@ class DashboardController extends Controller
         return $consultation->symptoms_desc;
     }
 
+    private function getPatientFollowUpStatus(int $patientId): array
+    {
+        $followUpRequest = FollowUpRequest::where('patient_id', $patientId)
+            ->latest('updated_at')
+            ->first();
+
+        if (!$followUpRequest) {
+            return [
+                'exists' => false,
+                'status' => 'none',
+                'status_label' => 'No follow-up request',
+                'status_badge_class' => 'inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold bg-slate-100 text-slate-700',
+                'updated_at' => null,
+                'decision_notes' => null,
+            ];
+        }
+
+        return [
+            'exists' => true,
+            'status' => $followUpRequest->status,
+            'status_label' => ucfirst($followUpRequest->status),
+            'status_badge_class' => $this->getFollowUpStatusBadgeClass($followUpRequest->status),
+            'updated_at' => optional($followUpRequest->updated_at)->format('M d, Y'),
+            'decision_notes' => $followUpRequest->decision_notes,
+        ];
+    }
+
+    private function getFollowUpStatusBadgeClass(string $status): string
+    {
+        $baseClass = 'inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold ';
+
+        return match ($status) {
+            'approved' => $baseClass . 'bg-emerald-100 text-emerald-700',
+            'pending', 'forwarded' => $baseClass . 'bg-yellow-100 text-yellow-700',
+            'rejected' => $baseClass . 'bg-red-100 text-red-700',
+            default => $baseClass . 'bg-slate-100 text-slate-700',
+        };
+    }
+
+    private function getPhysicianInitiatedFollowUp(int $patientId): ?array
+    {
+        $consultation = Consultation::query()
+            ->with(['consultationSession.slot', 'physician'])
+            ->where('patient_id', $patientId)
+            ->where('type', 'follow_up')
+            ->whereIn('request_status', ['scheduled', 'active'])
+            ->orderByRaw("CASE request_status WHEN 'scheduled' THEN 1 WHEN 'active' THEN 2 ELSE 3 END")
+            ->latest('submitted_at')
+            ->first();
+
+        if (!$consultation) {
+            return null;
+        }
+
+        $session = $consultation->consultationSession;
+
+        return [
+            'request_id' => $consultation->request_id,
+            'consultation_type_label' => 'Follow-up',
+            'request_status' => $consultation->request_status,
+            'status_label' => ucfirst($consultation->request_status),
+            'status_badge_class' => $this->getPatientStatusBadgeClass($consultation->request_status),
+            'submitted_at' => optional($consultation->submitted_at)->format('M d, Y'),
+            'physician_name' => trim(optional($consultation->physician)->first_name . ' ' . optional($consultation->physician)->last_name) ?: 'Your physician',
+            'consultation_status' => $consultation->request_status,
+            'scheduled_slot' => $consultation->consultationSession?->slot ? [
+                'slot_date' => $consultation->consultationSession->slot->slot_date?->format('M d, Y') ?? (string) $consultation->consultationSession->slot->slot_date,
+                'start_time' => $consultation->consultationSession->slot->start_time,
+                'end_time' => $consultation->consultationSession->slot->end_time,
+            ] : null,
+            'consultation_session' => $session ? [
+                'id' => $session->id,
+                'consultation_status' => $session->consultation_status,
+                'scheduled_slot' => $session->slot ? [
+                    'slot_date' => $session->slot->slot_date?->format('M d, Y') ?? (string) $session->slot->slot_date,
+                    'start_time' => $session->slot->start_time,
+                    'end_time' => $session->slot->end_time,
+                ] : null,
+            ] : null,
+        ];
+    }
+
     private function serializePatientConsultation(?Consultation $consultation): ?array
     {
         if (!$consultation) {
@@ -113,11 +200,16 @@ class DashboardController extends Controller
         $status = $consultation->request_status;
         $consultationSession = $consultation->consultationSession;
 
+        $consultationType = $consultation->type === 'follow_up' ? 'follow_up' : 'general';
+        $consultationTypeLabel = $consultation->type === 'follow_up' ? 'Follow-up' : 'General';
+
         return [
             'request_id' => $consultation->request_id,
             'show' => true,
             'show_messaging' => in_array($status, ['active', 'completed'], true) && $consultationSession,
             'details_url' => route('consultations.show', $consultation),
+            'consultation_type' => $consultationType,
+            'consultation_type_label' => $consultationTypeLabel,
             'concern_category' => $consultation->concern_category,
             'summary' => $this->getConsultationSummary($consultation) ?: 'No symptoms recorded',
             'request_status' => $status,

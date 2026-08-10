@@ -29,6 +29,8 @@
             $patientConsultationPayload = [
                 'request_id' => $activeConsultation->request_id,
                 'details_url' => route('consultations.show', $activeConsultation),
+                'consultation_type' => $activeConsultation->type === 'follow_up' ? 'follow_up' : 'general',
+                'consultation_type_label' => $activeConsultation->type === 'follow_up' ? 'Follow-up' : 'General',
                 'concern_category' => $activeConsultation->concern_category,
                 'summary' => $activeConsultationSummary ?? 'No symptoms recorded',
                 'request_status' => $status,
@@ -58,10 +60,12 @@
 
     <script>
         window.patientConsultation = @json($patientConsultationPayload);
+        window.physicianFollowUp = @json($physicianFollowUp);
 
-        function patientDashboard(initialConsultation, refreshUrl, unreadUrl) {
+        function patientDashboard(initialConsultation, initialPhysicianFollowUp, refreshUrl, unreadUrl) {
             return {
                 consultation: initialConsultation,
+                physicianFollowUp: initialPhysicianFollowUp,
                 refreshUrl,
                 unreadUrl,
                 refreshTimer: null,
@@ -85,9 +89,11 @@
                         },
                         success: (data) => {
                             const nextConsultation = data?.consultation ?? null;
+                            const nextPhysicianFollowUp = data?.physician_follow_up ?? null;
                             const previousUnreadCount = this.consultation?.session?.unread_count ?? 0;
 
                             this.consultation = nextConsultation;
+                            this.physicianFollowUp = nextPhysicianFollowUp;
 
                             if (this.consultation?.session) {
                                 this.consultation.session.unread_count = previousUnreadCount;
@@ -120,23 +126,100 @@
                     return count > 99 ? '99+' : String(count);
                 },
                 consultationTitle() {
-                    if (!this.consultation?.concern_category) {
+                    if (!this.consultation) {
                         return 'Consultation';
                     }
 
-                    const concernCategory = this.consultation.concern_category;
-                    return concernCategory.charAt(0).toUpperCase() + concernCategory.slice(1) + ' Consultation';
+                    const typeLabel = this.consultation.consultation_type_label || (this.consultation.consultation_type === 'follow_up' ? 'Follow-up' : 'General');
+                    const concernCategory = typeof this.consultation?.concern_category === 'string'
+                        ? this.consultation.concern_category.trim()
+                        : '';
+                    const normalizedConcernCategory = concernCategory
+                        ? concernCategory.charAt(0).toUpperCase() + concernCategory.slice(1)
+                        : '';
+                    const shouldIncludeConcernCategory = Boolean(normalizedConcernCategory) && normalizedConcernCategory.toLowerCase() !== 'general' && normalizedConcernCategory.toLowerCase() !== typeLabel.toLowerCase();
+
+                    if (!shouldIncludeConcernCategory) {
+                        return `${typeLabel} Consultation`;
+                    }
+
+                    return `${typeLabel} ${normalizedConcernCategory} Consultation`;
                 }
             };
         }
     </script>
 
-    <div class="py-12" x-data="patientDashboard(window.patientConsultation, '{{ route('dashboard.active_consultation') }}', '{{ route('consultations.messaging.unread_counts') }}')" x-init="init()">
+    <div class="py-12" x-data="patientDashboard(window.patientConsultation, window.physicianFollowUp, '{{ route('dashboard.active_consultation') }}', '{{ route('consultations.messaging.unread_counts') }}')" x-init="init()">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
                     {{ __("Hello $patientInfo->first_name!") }}
                 </div>
+            </div>
+
+            @if($followUpStatus['exists'] && in_array($followUpStatus['status'], ['pending', 'forwarded'], true))
+                <div class="mt-6 rounded-3xl border border-gray-200 bg-white shadow-sm">
+                    <div class="p-6 sm:p-8">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Follow-up Status</p>
+                                <h3 class="mt-2 text-xl font-bold text-slate-900">Your latest follow-up request</h3>
+                                <p class="mt-1 text-sm text-slate-600">
+                                    This request is currently marked as {{ strtolower($followUpStatus['status_label']) }}.
+                                </p>
+                            </div>
+                            <span class="{{ $followUpStatus['status_badge_class'] }}">{{ $followUpStatus['status_label'] }}</span>
+                        </div>
+
+                        <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                            <div class="rounded-2xl border border-gray-200 bg-slate-50 p-4">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Latest Update</p>
+                                <p class="mt-2 text-sm font-semibold text-slate-900">{{ $followUpStatus['updated_at'] ?? 'Pending review' }}</p>
+                            </div>
+                            <div class="rounded-2xl border border-gray-200 bg-slate-50 p-4">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Decision Notes</p>
+                                <p class="mt-2 text-sm text-slate-700">{{ $followUpStatus['decision_notes'] ?: 'No notes yet.' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            <div class="mt-6" x-show="physicianFollowUp" x-cloak>
+                <template x-if="physicianFollowUp">
+                    <div class="rounded-3xl border border-gray-200 bg-white shadow-sm">
+                        <div class="p-6 sm:p-8">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Physician Follow-up</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-900">A follow-up consultation was initiated by your physician</h3>
+                                    <p class="mt-1 text-sm text-slate-600" x-text="(physicianFollowUp?.physician_name || 'Your physician') + ' has arranged a follow-up consultation for you.'"></p>
+                                </div>
+                                <span :class="physicianFollowUp?.status_badge_class" x-text="physicianFollowUp?.status_label"></span>
+                            </div>
+
+                            <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                                <div class="rounded-2xl border border-gray-200 bg-slate-50 p-4">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Consultation Type</p>
+                                    <p class="mt-2 text-sm font-semibold text-slate-900" x-text="physicianFollowUp?.consultation_type_label"></p>
+                                </div>
+                                <div class="rounded-2xl border border-gray-200 bg-slate-50 p-4">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Consultation Status</p>
+                                    <p class="mt-2 text-sm font-semibold text-slate-900" x-text="physicianFollowUp?.status_label"></p>
+                                </div>
+                                <div class="rounded-2xl border border-gray-200 bg-slate-50 p-4 sm:col-span-2">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Scheduled Appointment</p>
+                                    <template x-if="physicianFollowUp?.scheduled_slot">
+                                        <p class="mt-2 text-sm font-semibold text-slate-900" x-text="physicianFollowUp.scheduled_slot.slot_date + ' ' + physicianFollowUp.scheduled_slot.start_time + ' - ' + physicianFollowUp.scheduled_slot.end_time"></p>
+                                    </template>
+                                    <template x-if="!physicianFollowUp?.scheduled_slot">
+                                        <p class="mt-2 text-sm text-slate-600">No schedule slot has been assigned yet.</p>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
 
             <div class="mt-6" x-show="consultation" x-cloak>

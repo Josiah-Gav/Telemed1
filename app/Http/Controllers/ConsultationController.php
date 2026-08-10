@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Support\Facades\Storage;
+use App\Models\FollowUpRequest;
 
 class ConsultationController extends Controller
 {
@@ -28,17 +29,110 @@ class ConsultationController extends Controller
      */
     public function history()
     {
-        $consultations = Consultation::where('patient_id', auth()->id())
+        $dateFilter = (string) request()->query('date_filter', 'all');
+        $statusFilter = (string) request()->query('status', 'all');
+        $typeFilter = (string) request()->query('consultation_type', 'all');
+
+        $allowedDateFilters = ['today', 'last_7_days', 'last_30_days', 'all'];
+        $allowedStatusFilters = ['completed', 'cancelled', 'rejected', 'all'];
+        $allowedTypeFilters = ['follow_up', 'general', 'all'];
+
+        if (!in_array($dateFilter, $allowedDateFilters, true)) {
+            $dateFilter = 'all';
+        }
+
+        if (!in_array($statusFilter, $allowedStatusFilters, true)) {
+            $statusFilter = 'all';
+        }
+
+        if (!in_array($typeFilter, $allowedTypeFilters, true)) {
+            $typeFilter = 'all';
+        }
+
+        $consultations = Consultation::query()
+            ->where('patient_id', auth()->id())
             ->where(function ($query) {
                 $query->whereIn('request_status', ['completed', 'rejected', 'cancelled'])
                     ->orWhereHas('consultationSession', function ($sessionQuery) {
                         $sessionQuery->where('consultation_status', 'completed');
                     });
             })
+            ->when($statusFilter !== 'all', function ($query) use ($statusFilter) {
+                $query->where('request_status', $statusFilter);
+            })
+            ->when($typeFilter === 'follow_up', function ($query) {
+                $query->where('type', 'follow_up');
+            })
+            ->when($typeFilter === 'general', function ($query) {
+                $query->where(function ($typeQuery) {
+                    $typeQuery->whereNull('type')->orWhere('type', '!=', 'follow_up');
+                });
+            })
+            ->when($dateFilter === 'today', function ($query) {
+                $query->whereDate('submitted_at', now()->toDateString());
+            })
+            ->when($dateFilter === 'last_7_days', function ($query) {
+                $query->where('submitted_at', '>=', now()->subDays(7)->startOfDay());
+            })
+            ->when($dateFilter === 'last_30_days', function ($query) {
+                $query->where('submitted_at', '>=', now()->subDays(30)->startOfDay());
+            })
             ->latest('submitted_at')
             ->get();
 
-        return view('patient.consultation-history', compact('consultations'));
+        $rejectedFollowUpRequests = FollowUpRequest::query()
+            ->with(['consultation.request'])
+            ->where('patient_id', auth()->id())
+            ->where('status', 'rejected')
+            ->when($statusFilter !== 'all', function ($query) use ($statusFilter) {
+                if ($statusFilter !== 'rejected') {
+                    $query->whereRaw('1 = 0');
+                }
+            })
+            ->when($typeFilter === 'general', function ($query) {
+                $query->whereRaw('1 = 0');
+            })
+            ->when($dateFilter === 'today', function ($query) {
+                $query->whereDate('updated_at', now()->toDateString());
+            })
+            ->when($dateFilter === 'last_7_days', function ($query) {
+                $query->where('updated_at', '>=', now()->subDays(7)->startOfDay());
+            })
+            ->when($dateFilter === 'last_30_days', function ($query) {
+                $query->where('updated_at', '>=', now()->subDays(30)->startOfDay());
+            })
+            ->latest('updated_at')
+            ->get();
+
+        $historyItems = $consultations
+            ->map(function (Consultation $consultation) {
+                return [
+                    'type' => 'consultation',
+                    'sort_at' => $consultation->submitted_at,
+                    'consultation' => $consultation,
+                ];
+            })
+            ->concat(
+                $rejectedFollowUpRequests->map(function (FollowUpRequest $followUpRequest) {
+                    return [
+                        'type' => 'rejected_follow_up_request',
+                        'sort_at' => $followUpRequest->updated_at,
+                        'follow_up_request' => $followUpRequest,
+                    ];
+                })
+            )
+            ->sortByDesc(function (array $item) {
+                return optional($item['sort_at'])->timestamp ?? 0;
+            })
+            ->values();
+
+        $filters = [
+            'date_filter' => $dateFilter,
+            'status' => $statusFilter,
+            'consultation_type' => $typeFilter,
+        ];
+
+        return view('patient.consultation-history', compact('consultations', 'rejectedFollowUpRequests', 'historyItems', 'filters'));
     }
 
     /**

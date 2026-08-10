@@ -17,6 +17,7 @@
                 'assigned_nurse_name' => trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: 'Unassigned',
                 'submitted_at' => $consultation->submitted_at ? $consultation->submitted_at->format('Y-m-d H:i') : null,
                 'priority_level' => $consultation->priority_level,
+                'consultation_type' => $consultation->type === 'follow_up' ? 'Follow-up' : 'General',
                 'concern_category' => $consultation->concern_category,
                 'symptoms_desc' => $consultation->symptoms_desc,
                 'online_reason' => $consultation->online_reason,
@@ -105,6 +106,7 @@
                                 <thead class="bg-gray-50">
                                     <tr>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Consultation Type') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Assigned Nurse') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
@@ -117,6 +119,14 @@
                                     @foreach($activeConsultations as $consultation)
                                         <tr>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($consultation->patient)->first_name ? optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name : __('Unknown Patient') }}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                @php
+                                                    $consultationTypeLabel = $consultation->type === 'follow_up' ? __('Follow-up') : __('General');
+                                                @endphp
+                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $consultation->type === 'follow_up' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700' }}">
+                                                    {{ $consultationTypeLabel }}
+                                                </span>
+                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                 @php
                                                     $symptomsDisplay = __('N/A');

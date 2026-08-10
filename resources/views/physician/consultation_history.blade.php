@@ -5,84 +5,216 @@
         </h2>
     </x-slot>
 
+    <script>
+        function scheduleFollowUpFromHistory(button) {
+            const consultationId = button.getAttribute('data-consultation-id');
+            const physicianId = button.getAttribute('data-physician-id');
+            const followUpUrl = button.getAttribute('data-follow-up-url');
+            const slotsUrl = button.getAttribute('data-slots-url');
+            const csrfTokenElement = document.querySelector('meta[name="csrf-token"]');
+            const csrfToken = csrfTokenElement ? csrfTokenElement.getAttribute('content') : '';
+
+            if (!consultationId || !physicianId || !followUpUrl || !slotsUrl || !csrfToken) {
+                Swal.fire('Error', 'Unable to start follow-up scheduling.', 'error');
+                return;
+            }
+
+            const loadSlots = () => {
+                fetch(slotsUrl, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        const slots = Array.isArray(data?.slots) ? data.slots : [];
+
+                        if (!slots.length) {
+                            Swal.fire({
+                                title: 'No Available Slots',
+                                text: 'Create available schedule slots first before scheduling a follow-up.',
+                                icon: 'info',
+                                showCancelButton: true,
+                                confirmButtonText: 'Go To Schedule Slots',
+                                cancelButtonText: 'Close',
+                            }).then((result) => {
+                                if (result.isConfirmed) {
+                                    window.location.href = data?.manage_schedule_url || '/physicians/' + physicianId + '/scheduled_consultation';
+                                }
+                            });
+                            return;
+                        }
+
+                        const options = slots.reduce((carry, slot) => {
+                            carry[String(slot.slot_id)] = `${slot.label} (${slot.slot_date})`;
+                            return carry;
+                        }, {});
+
+                        Swal.fire({
+                            title: 'Schedule Follow-up',
+                            text: 'Choose a slot and provide the physician decision notes before scheduling.',
+                            html: `
+                                <div class="text-left">
+                                    <label class="mb-2 block text-sm font-semibold text-slate-700" for="follow-up-slot">Select Schedule Slot</label>
+                                    <select id="follow-up-slot" class="swal2-input">
+                                        <option value="">Select a slot</option>
+                                        ${Object.entries(options).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+                                    </select>
+                                    <label class="mt-3 mb-2 block text-sm font-semibold text-slate-700" for="follow-up-notes">Decision Notes</label>
+                                    <textarea id="follow-up-notes" class="swal2-textarea" placeholder="Enter the physician decision notes..."></textarea>
+                                </div>
+                            `,
+                            showCancelButton: true,
+                            confirmButtonText: 'Schedule Follow-up',
+                            preConfirm: () => {
+                                const slotId = document.getElementById('follow-up-slot').value;
+                                const decisionNotes = document.getElementById('follow-up-notes').value.trim();
+
+                                if (!slotId) {
+                                    Swal.showValidationMessage('Please select a schedule slot.');
+                                    return false;
+                                }
+
+                                if (!decisionNotes) {
+                                    Swal.showValidationMessage('Decision notes are required before scheduling the follow-up.');
+                                    return false;
+                                }
+
+                                return {
+                                    slot_id: slotId,
+                                    decision_notes: decisionNotes,
+                                };
+                            },
+                        }).then((result) => {
+                            if (!result.isConfirmed || !result.value) {
+                                return;
+                            }
+
+                            fetch(followUpUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'X-CSRF-TOKEN': csrfToken,
+                                },
+                                body: JSON.stringify({
+                                    mode: 'scheduled',
+                                    slot_id: result.value.slot_id,
+                                    decision_notes: result.value.decision_notes,
+                                }),
+                            })
+                                .then((response) => response.json())
+                                .then((data) => {
+                                    if (data.success) {
+                                        Swal.fire('Success', data.message || 'Follow-up scheduled successfully.', 'success').then(() => {
+                                            window.location.reload();
+                                        });
+                                    } else {
+                                        Swal.fire('Error', data.message || 'Unable to schedule follow-up.', 'error');
+                                    }
+                                })
+                                .catch(() => {
+                                    Swal.fire('Error', 'Unable to schedule follow-up.', 'error');
+                                });
+                        });
+                    })
+                    .catch(() => {
+                        Swal.fire('Error', 'Unable to load available slots.', 'error');
+                    });
+            };
+
+            loadSlots();
+        }
+
+        function initPhysicianHistoryLiveSearch() {
+            const form = document.getElementById('physician-history-filter-form');
+            const searchInput = document.getElementById('search');
+            const resultsContainer = document.getElementById('physician-history-results');
+
+            if (!form || !searchInput || !resultsContainer) {
+                return;
+            }
+
+            let debounceTimer = null;
+
+            searchInput.addEventListener('input', () => {
+                if (debounceTimer) {
+                    clearTimeout(debounceTimer);
+                }
+
+                debounceTimer = window.setTimeout(() => {
+                    const params = new URLSearchParams(new FormData(form));
+                    const requestUrl = `${form.action}?${params.toString()}`;
+
+                    fetch(requestUrl, {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                        },
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (typeof data?.html === 'string') {
+                                resultsContainer.innerHTML = data.html;
+                            }
+                        })
+                        .catch(() => {
+                            // Keep existing results when request fails.
+                        });
+                }, 300);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', initPhysicianHistoryLiveSearch);
+    </script>
+
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
-                    @if($completedConsultations->isEmpty())
-                        <p class="text-sm text-gray-500">{{ __('No completed consultations yet.') }}</p>
-                    @else
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Patient Name') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Symptoms') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Assigned Nurse') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Completed At') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Status') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Actions') }}</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-200 bg-white">
-                                    @foreach($completedConsultations as $consultation)
-                                        <tr>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                                                {{ optional($consultation->patient)->first_name ? optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name : __('Unknown Patient') }}
-                                            </td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                                                @php
-                                                    $symptomsDisplay = __('N/A');
-                                                    $symptomsData = $consultation->symptoms_desc;
-
-                                                    if (!empty($symptomsData)) {
-                                                        if (is_array($symptomsData)) {
-                                                            $symptomsDisplay = collect($symptomsData)
-                                                                ->map(function ($item) {
-                                                                    return is_array($item) ? ($item['name'] ?? null) : $item;
-                                                                })
-                                                                ->filter()
-                                                                ->implode(', ');
-                                                        } else {
-                                                            $symptomsDisplay = $symptomsData;
-                                                        }
-                                                    }
-                                                @endphp
-                                                {{ $symptomsDisplay }}
-                                            </td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                                                {{ trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: __('Unassigned') }}
-                                            </td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                                                {{ optional(optional($consultation->consultationSession)->completed_at)->format('Y-m-d H:i') ?? optional($consultation->updated_at)->format('Y-m-d H:i') ?? __('Unknown') }}
-                                            </td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                                <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                                                    {{ __('Completed') }}
-                                                </span>
-                                            </td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                                @if($consultation->consultationSession)
-                                                    <a
-                                                        href="{{ route('consultations.messaging.show', $consultation->consultationSession) }}"
-                                                        class="inline-flex items-center gap-1 rounded-md bg-slate-700 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-                                                        aria-label="View consultation record"
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="h-4 w-4" aria-hidden="true">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75h6.75m-6.75 3h4.5m6.375 7.5-3.375-2.025a3.75 3.75 0 0 0-1.928-.525H6.75A3.75 3.75 0 0 1 3 13.95V7.5A3.75 3.75 0 0 1 6.75 3.75h10.5A3.75 3.75 0 0 1 21 7.5v8.25a3.75 3.75 0 0 1-1.5 3z" />
-                                                        </svg>
-                                                        <span>{{ __('View record') }}</span>
-                                                    </a>
-                                                @else
-                                                    <span class="text-xs text-gray-500">{{ __('Session unavailable') }}</span>
-                                                @endif
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                    <form id="physician-history-filter-form" method="GET" action="{{ route('physician.consultation_history', ['physician' => $physician->user_id]) }}" class="mb-6 rounded-2xl border border-gray-200 bg-slate-50 p-4">
+                        <div class="grid gap-4 sm:grid-cols-4">
+                            <div>
+                                <label for="date_filter" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Date Range</label>
+                                <select id="date_filter" name="date_filter" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                                    <option value="all" {{ ($filters['date_filter'] ?? 'all') === 'all' ? 'selected' : '' }}>All</option>
+                                    <option value="today" {{ ($filters['date_filter'] ?? 'all') === 'today' ? 'selected' : '' }}>Today</option>
+                                    <option value="last_7_days" {{ ($filters['date_filter'] ?? 'all') === 'last_7_days' ? 'selected' : '' }}>Last 7 Days</option>
+                                    <option value="last_30_days" {{ ($filters['date_filter'] ?? 'all') === 'last_30_days' ? 'selected' : '' }}>Last 30 Days</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="status" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</label>
+                                <select id="status" name="status" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                                    <option value="all" {{ ($filters['status'] ?? 'all') === 'all' ? 'selected' : '' }}>All Statuses</option>
+                                    <option value="completed" {{ ($filters['status'] ?? 'all') === 'completed' ? 'selected' : '' }}>Completed</option>
+                                    <option value="cancelled" {{ ($filters['status'] ?? 'all') === 'cancelled' ? 'selected' : '' }}>Cancelled</option>
+                                    <option value="rejected" {{ ($filters['status'] ?? 'all') === 'rejected' ? 'selected' : '' }}>Rejected</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="consultation_type" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Consultation Type</label>
+                                <select id="consultation_type" name="consultation_type" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                                    <option value="all" {{ ($filters['consultation_type'] ?? 'all') === 'all' ? 'selected' : '' }}>All Types</option>
+                                    <option value="follow_up" {{ ($filters['consultation_type'] ?? 'all') === 'follow_up' ? 'selected' : '' }}>Follow-up</option>
+                                    <option value="general" {{ ($filters['consultation_type'] ?? 'all') === 'general' ? 'selected' : '' }}>General</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="search" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Search Patient or Nurse</label>
+                                <input id="search" type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Enter patient or nurse name" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                            </div>
                         </div>
-                    @endif
+                        <div class="mt-4 flex items-center gap-2">
+                            <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900">Apply</button>
+                            <a href="{{ route('physician.consultation_history', ['physician' => $physician->user_id]) }}" class="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Reset</a>
+                        </div>
+                    </form>
+
+                    <div id="physician-history-results">
+                        @include('physician.partials.consultation_history_table', ['historyConsultations' => $historyConsultations, 'physician' => $physician])
+                    </div>
                 </div>
             </div>
         </div>

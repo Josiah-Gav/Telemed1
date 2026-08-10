@@ -87,23 +87,13 @@
                         });
                     });
                 },
-                approveImmediate(requestItem) {
+                approveFollowUp(requestItem) {
                     Swal.fire({
-                        title: 'Approve Follow-up',
-                        text: 'Start the follow-up consultation immediately?',
+                        title: 'Approve Follow-up Request',
+                        text: 'Confirm approval for this follow-up request.',
                         icon: 'question',
-                        input: 'textarea',
-                        inputPlaceholder: 'Add physician decision notes (required)...',
-                        inputAttributes: {
-                            'aria-label': 'Add physician decision notes'
-                        },
                         showCancelButton: true,
-                        confirmButtonText: 'Approve & Start Now',
-                        inputValidator: (value) => {
-                            if (!value) {
-                                return 'Decision notes are required.';
-                            }
-                        }
+                        confirmButtonText: 'Approve Request',
                     }).then((result) => {
                         if (!result.isConfirmed) {
                             return;
@@ -111,9 +101,13 @@
 
                         this.submitDecision(requestItem, {
                             decision: 'approved',
-                            mode: 'immediate',
-                            decision_notes: result.value,
                         });
+                    });
+                },
+                startFollowUpNow(requestItem) {
+                    this.submitDecision(requestItem, {
+                        decision: 'approved',
+                        mode: 'immediate',
                     });
                 },
                 approveScheduled(requestItem) {
@@ -155,7 +149,7 @@
                                 inputOptions: options,
                                 inputPlaceholder: 'Select an available slot',
                                 showCancelButton: true,
-                                confirmButtonText: 'Continue',
+                                confirmButtonText: 'Approve & Schedule',
                                 inputValidator: (value) => {
                                     if (!value) {
                                         return 'Please select a slot.';
@@ -166,33 +160,10 @@
                                     return;
                                 }
 
-                                Swal.fire({
-                                    title: 'Decision Notes',
-                                    text: 'Add physician decision notes before approval.',
-                                    icon: 'question',
-                                    input: 'textarea',
-                                    inputPlaceholder: 'Add physician decision notes (required)...',
-                                    inputAttributes: {
-                                        'aria-label': 'Add physician decision notes'
-                                    },
-                                    showCancelButton: true,
-                                    confirmButtonText: 'Approve & Schedule',
-                                    inputValidator: (value) => {
-                                        if (!value) {
-                                            return 'Decision notes are required.';
-                                        }
-                                    }
-                                }).then((noteResult) => {
-                                    if (!noteResult.isConfirmed) {
-                                        return;
-                                    }
-
-                                    this.submitDecision(requestItem, {
-                                        decision: 'approved',
-                                        mode: 'scheduled',
-                                        slot_id: Number(slotResult.value),
-                                        decision_notes: noteResult.value,
-                                    });
+                                this.submitDecision(requestItem, {
+                                    decision: 'approved',
+                                    mode: 'scheduled',
+                                    slot_id: Number(slotResult.value),
                                 });
                             });
                         },
@@ -242,24 +213,36 @@
                                     </td>
                                     <td class="px-6 py-4 text-sm">
                                         <div class="flex flex-wrap gap-2">
-                                            <button type="button" @click="approveImmediate({
-                                                id: {{ $followUp->id }},
-                                                patient_name: @js($patientName),
-                                                reason: @js($followUp->reason),
-                                                decide_url: @js(route('physician.follow_up_requests.decide', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id])),
-                                                available_slots_url: @js(route('physician.follow_up_requests.available_slots', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id]))
-                                            })" class="inline-flex items-center rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">
-                                                Approve Now
-                                            </button>
-                                            <button type="button" @click="approveScheduled({
-                                                id: {{ $followUp->id }},
-                                                patient_name: @js($patientName),
-                                                reason: @js($followUp->reason),
-                                                decide_url: @js(route('physician.follow_up_requests.decide', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id])),
-                                                available_slots_url: @js(route('physician.follow_up_requests.available_slots', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id]))
-                                            })" class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
-                                                Approve & Schedule
-                                            </button>
+                                            @if($followUp->status === 'approved')
+                                                <button type="button" @click="startFollowUpNow({
+                                                    id: {{ $followUp->id }},
+                                                    patient_name: @js($patientName),
+                                                    reason: @js($followUp->reason),
+                                                    decide_url: @js(route('physician.follow_up_requests.decide', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id])),
+                                                    available_slots_url: @js(route('physician.follow_up_requests.available_slots', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id]))
+                                                })" class="inline-flex items-center rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">
+                                                    Start Now
+                                                </button>
+                                                <button type="button" @click="approveScheduled({
+                                                    id: {{ $followUp->id }},
+                                                    patient_name: @js($patientName),
+                                                    reason: @js($followUp->reason),
+                                                    decide_url: @js(route('physician.follow_up_requests.decide', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id])),
+                                                    available_slots_url: @js(route('physician.follow_up_requests.available_slots', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id]))
+                                                })" class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                                                    Schedule
+                                                </button>
+                                            @else
+                                                <button type="button" @click="approveFollowUp({
+                                                    id: {{ $followUp->id }},
+                                                    patient_name: @js($patientName),
+                                                    reason: @js($followUp->reason),
+                                                    decide_url: @js(route('physician.follow_up_requests.decide', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id])),
+                                                    available_slots_url: @js(route('physician.follow_up_requests.available_slots', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id]))
+                                                })" class="inline-flex items-center rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">
+                                                    Approve
+                                                </button>
+                                            @endif
                                             <button type="button" @click="rejectRequest({
                                                 id: {{ $followUp->id }},
                                                 patient_name: @js($patientName),

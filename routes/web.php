@@ -83,6 +83,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('physician.follow_up_requests');
         Route::get('/follow-up-requests/{followUpRequest}/available-slots', [\App\Http\Controllers\PhysicianController::class, 'availableSlotsForFollowUpRequest'])
             ->name('physician.follow_up_requests.available_slots');
+        Route::get('/consultation-sessions/{session}/follow-up/available-slots', [\App\Http\Controllers\PhysicianController::class, 'availableSlotsForPhysicianFollowUp'])
+            ->name('physician.follow_up.available_slots');
         Route::post('/follow-up-requests/{followUpRequest}/decide', [\App\Http\Controllers\PhysicianController::class, 'decideFollowUpRequest'])
             ->name('physician.follow_up_requests.decide');
         Route::post('/consultation-sessions/{session}/follow-up', [\App\Http\Controllers\PhysicianController::class, 'createPhysicianFollowUp'])

@@ -410,18 +410,18 @@ class PhysicianController extends Controller
             'decision' => 'required|in:approved,rejected',
             'mode' => 'nullable|in:immediate,scheduled',
             'slot_id' => 'nullable|integer',
-            'decision_notes' => 'required|string|max:2000',
+            'decision_notes' => 'nullable|string|max:2000',
         ]);
 
-        if ($followUpRequest->status !== 'forwarded') {
+        if (!in_array($followUpRequest->status, ['forwarded', 'approved'], true)) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Only forwarded follow-up requests can be decided.',
+                    'message' => 'Only forwarded or approved follow-up requests can be decided.',
                 ], 422);
             }
 
-            return back()->withErrors(['follow_up_request' => 'Only forwarded follow-up requests can be decided.']);
+            return back()->withErrors(['follow_up_request' => 'Only forwarded or approved follow-up requests can be decided.']);
         }
 
         if ($validated['decision'] === 'rejected') {
@@ -429,7 +429,7 @@ class PhysicianController extends Controller
                 'status' => 'rejected',
                 'decided_by_physician_id' => Auth::id(),
                 'decided_at' => now(),
-                'decision_notes' => $validated['decision_notes'],
+                'decision_notes' => $validated['decision_notes'] ?? null,
             ]);
 
             // TODO: Notify patient
@@ -445,6 +445,25 @@ class PhysicianController extends Controller
         }
 
         $mode = $validated['mode'] ?? null;
+
+        if ($mode === null) {
+            $followUpRequest->update([
+                'status' => 'approved',
+                'decided_by_physician_id' => Auth::id(),
+                'decided_at' => now(),
+                'decision_notes' => $validated['decision_notes'] ?? null,
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Follow-up request approved. Choose to start now or schedule later.',
+                ]);
+            }
+
+            return back()->with('status', 'Follow-up request approved. Choose to start now or schedule later.');
+        }
+
         if (!in_array($mode, ['immediate', 'scheduled'], true)) {
             if ($request->expectsJson()) {
                 return response()->json([
@@ -469,7 +488,7 @@ class PhysicianController extends Controller
                     'status' => 'approved',
                     'decided_by_physician_id' => Auth::id(),
                     'decided_at' => now(),
-                    'decision_notes' => $validated['decision_notes'],
+                    'decision_notes' => $validated['decision_notes'] ?? null,
                 ]);
             });
         } catch (\RuntimeException $e) {
@@ -541,6 +560,63 @@ class PhysicianController extends Controller
         ]);
     }
 
+    public function availableSlotsForPhysicianFollowUp(User $physician, ConsultationSession $session): JsonResponse
+    {
+        $this->authorizePhysician($physician);
+
+        if ((int) $session->physician_id !== (int) Auth::id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only the assigned physician can schedule a follow-up for this consultation.',
+            ], 403);
+        }
+
+        $consultation = Consultation::query()
+            ->where('request_id', $session->request_id)
+            ->first();
+
+        if (!$consultation || $consultation->request_status !== 'completed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Follow-up can only be scheduled from a completed consultation.',
+            ], 422);
+        }
+
+        $today = now()->toDateString();
+
+        $slots = ScheduleSlot::query()
+            ->where('physician_id', $physician->user_id)
+            ->whereDate('slot_date', '>=', $today)
+            ->where('status', 'available')
+            ->orderBy('slot_date')
+            ->orderBy('start_time')
+            ->get()
+            ->filter(function (ScheduleSlot $slot) {
+                return !$this->isScheduleSlotInPast($slot);
+            })
+            ->map(function (ScheduleSlot $slot) {
+                $start = CarbonImmutable::createFromFormat('H:i:s', $slot->start_time);
+                $end = CarbonImmutable::createFromFormat('H:i:s', $slot->end_time);
+
+                return [
+                    'slot_id' => $slot->slot_id,
+                    'slot_date' => $slot->slot_date?->format('Y-m-d') ?? $slot->slot_date,
+                    'start_time' => $slot->start_time,
+                    'end_time' => $slot->end_time,
+                    'label' => $start->format('g:i A') . ' - ' . $end->format('g:i A'),
+                ];
+            })
+            ->values()
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'slots' => $slots,
+            'no_slots' => count($slots) === 0,
+            'manage_schedule_url' => route('physician.scheduled_consultation', ['physician' => $physician->user_id]),
+        ]);
+    }
+
     public function createPhysicianFollowUp(Request $request, User $physician, ConsultationSession $session): JsonResponse
     {
         $this->authorizePhysician($physician);
@@ -562,16 +638,33 @@ class PhysicianController extends Controller
         $validated = $request->validate([
             'mode' => 'required|in:immediate,scheduled',
             'slot_id' => 'nullable|integer',
+            'decision_notes' => 'required|string|max:2000',
         ]);
 
         try {
             DB::transaction(function () use ($session, $validated) {
-                $this->createFollowUpConsultationFromSource(
+                $followUpConsultation = $this->createFollowUpConsultationFromSource(
                     $session,
                     Auth::id(),
                     $validated['mode'],
                     $validated['slot_id'] ?? null
                 );
+
+                FollowUpRequest::create([
+                    'consultation_id' => $session->id,
+                    'patient_id' => $session->request?->patient_id,
+                    'reason' => 'Physician scheduled a follow-up consultation directly.',
+                    'status' => 'approved',
+                    'decision_notes' => $validated['decision_notes'],
+                    'reviewed_by_nurse_id' => null,
+                    'reviewed_at' => now(),
+                    'decided_by_physician_id' => Auth::id(),
+                    'decided_at' => now(),
+                ]);
+
+                $followUpConsultation->update([
+                    'request_status' => $validated['mode'] === 'immediate' ? 'active' : 'scheduled',
+                ]);
             });
         } catch (\RuntimeException $e) {
             return response()->json([
@@ -592,15 +685,107 @@ class PhysicianController extends Controller
     {
         $this->authorizePhysician($physician);
 
-        $completedConsultations = Consultation::with(['patient', 'nurse', 'consultationSession'])
-            ->where('request_status', 'completed')
+        $dateFilter = (string) request()->query('date_filter', 'all');
+        $statusFilter = (string) request()->query('status', 'all');
+        $typeFilter = (string) request()->query('consultation_type', 'all');
+        $search = trim((string) request()->query('search', ''));
+
+        $allowedDateFilters = ['today', 'last_7_days', 'last_30_days', 'all'];
+        $allowedStatusFilters = ['completed', 'cancelled', 'rejected', 'all'];
+        $allowedTypeFilters = ['follow_up', 'general', 'all'];
+
+        if (!in_array($dateFilter, $allowedDateFilters, true)) {
+            $dateFilter = 'all';
+        }
+
+        if (!in_array($statusFilter, $allowedStatusFilters, true)) {
+            $statusFilter = 'all';
+        }
+
+        if (!in_array($typeFilter, $allowedTypeFilters, true)) {
+            $typeFilter = 'all';
+        }
+
+        $historyConsultations = Consultation::with(['patient', 'nurse', 'consultationSession'])
             ->where('assigned_physician_id', Auth::id())
+            ->where(function ($query) {
+                $query->whereIn('request_status', ['completed', 'rejected', 'cancelled'])
+                    ->orWhereHas('consultationSession', function ($sessionQuery) {
+                        $sessionQuery->where('consultation_status', 'completed');
+                    });
+            })
+            ->when($statusFilter !== 'all', function ($query) use ($statusFilter) {
+                $query->where('request_status', $statusFilter);
+            })
+            ->when($typeFilter === 'follow_up', function ($query) {
+                $query->where('type', 'follow_up');
+            })
+            ->when($typeFilter === 'general', function ($query) {
+                $query->where(function ($typeQuery) {
+                    $typeQuery->whereNull('type')->orWhere('type', '!=', 'follow_up');
+                });
+            })
+            ->when($dateFilter === 'today', function ($query) {
+                $query->whereDate('submitted_at', now()->toDateString());
+            })
+            ->when($dateFilter === 'last_7_days', function ($query) {
+                $query->where('submitted_at', '>=', now()->subDays(7)->startOfDay());
+            })
+            ->when($dateFilter === 'last_30_days', function ($query) {
+                $query->where('submitted_at', '>=', now()->subDays(30)->startOfDay());
+            })
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery->whereHas('patient', function ($patientQuery) use ($search) {
+                        $patientQuery->where('first_name', 'like', '%' . $search . '%')
+                            ->orWhere('last_name', 'like', '%' . $search . '%');
+                    })->orWhereHas('nurse', function ($nurseQuery) use ($search) {
+                        $nurseQuery->where('first_name', 'like', '%' . $search . '%')
+                            ->orWhere('last_name', 'like', '%' . $search . '%');
+                    });
+                });
+            })
             ->orderByDesc('updated_at')
             ->get();
 
+        $sourceSessionIds = $historyConsultations
+            ->pluck('consultationSession.id')
+            ->filter()
+            ->values();
+
+        $parentSessionIdsWithFollowUp = Consultation::query()
+            ->where('type', 'follow_up')
+            ->whereIn('parent_consultation_id', $sourceSessionIds)
+            ->pluck('parent_consultation_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $historyConsultations->each(function (Consultation $consultation) use ($parentSessionIdsWithFollowUp) {
+            $sessionId = (int) ($consultation->consultationSession?->id ?? 0);
+            $consultation->setAttribute('has_existing_follow_up', $sessionId > 0 && $parentSessionIdsWithFollowUp->contains($sessionId));
+        });
+
+        $filters = [
+            'date_filter' => $dateFilter,
+            'status' => $statusFilter,
+            'consultation_type' => $typeFilter,
+            'search' => $search,
+        ];
+
+        if (request()->ajax()) {
+            return response()->json([
+                'html' => view('physician.partials.consultation_history_table', [
+                    'historyConsultations' => $historyConsultations,
+                    'physician' => $physician,
+                ])->render(),
+            ]);
+        }
+
         return view('physician.consultation_history', [
             'physician' => $physician,
-            'completedConsultations' => $completedConsultations,
+            'historyConsultations' => $historyConsultations,
+            'filters' => $filters,
         ]);
     }
 

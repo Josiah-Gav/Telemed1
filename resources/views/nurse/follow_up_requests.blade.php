@@ -5,7 +5,117 @@
         </h2>
     </x-slot>
 
-    <div class="py-10">
+    @php
+        $pendingFollowUpPayload = collect($pendingRequests)->map(function ($followUp) use ($nurse) {
+            return [
+                'id' => $followUp->id,
+                'patient_name' => trim((optional($followUp->patient)->first_name ?? '') . ' ' . (optional($followUp->patient)->last_name ?? '')) ?: 'Unknown Patient',
+                'original_consultation' => optional(optional($followUp->consultation)->request)->concern_category ?? 'Completed Consultation',
+                'reason' => $followUp->reason,
+                'forward_url' => route('nurse.follow_up_requests.forward', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id]),
+                'reject_url' => route('nurse.follow_up_requests.reject', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id]),
+            ];
+        })->values();
+    @endphp
+
+    <script>
+        window.pendingFollowUpRequests = @json($pendingFollowUpPayload);
+
+        function nurseFollowUpRequests(initialRequests) {
+            return {
+                requests: initialRequests || [],
+                submitDecision(requestItem, payload) {
+                    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+
+                    if (!csrfToken) {
+                        Swal.fire('Error', 'Missing CSRF token.', 'error');
+                        return;
+                    }
+
+                    $.ajax({
+                        url: payload.action === 'forward' ? requestItem.forward_url : requestItem.reject_url,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        data: JSON.stringify(payload),
+                        dataType: 'json',
+                        success: (data) => {
+                            if (data.success) {
+                                Swal.fire('Success', data.message, 'success').then(() => {
+                                    window.location.reload();
+                                });
+                            } else {
+                                Swal.fire('Error', data.message || 'Unable to process follow-up request.', 'error');
+                            }
+                        },
+                        error: (xhr) => {
+                            const message = xhr.responseJSON?.message || 'Unable to process follow-up request.';
+                            Swal.fire('Error', message, 'error');
+                        }
+                    });
+                },
+                forwardRequest(requestItem) {
+                    Swal.fire({
+                        title: 'Forward Follow-up Request',
+                        text: 'Add optional screening notes before forwarding to the physician.',
+                        icon: 'question',
+                        input: 'textarea',
+                        inputPlaceholder: 'Optional nurse screening notes...',
+                        inputAttributes: {
+                            'aria-label': 'Optional nurse screening notes'
+                        },
+                        showCancelButton: true,
+                        confirmButtonText: 'Forward',
+                    }).then((result) => {
+                        if (!result.isConfirmed) {
+                            return;
+                        }
+
+                        this.submitDecision(requestItem, {
+                            action: 'forward',
+                            decision_notes: result.value || null,
+                        });
+                    });
+                },
+                rejectRequest(requestItem) {
+                    Swal.fire({
+                        title: 'Reject Follow-up Request',
+                        text: 'Please provide a reason for rejection.',
+                        icon: 'warning',
+                        input: 'textarea',
+                        inputPlaceholder: 'Required rejection reason...',
+                        inputAttributes: {
+                            'aria-label': 'Required rejection reason'
+                        },
+                        showCancelButton: true,
+                        confirmButtonColor: '#dc2626',
+                        cancelButtonColor: '#6b7280',
+                        confirmButtonText: 'Reject',
+                        inputValidator: (value) => {
+                            if (!value) {
+                                return 'A rejection reason is required.';
+                            }
+                        }
+                    }).then((result) => {
+                        if (!result.isConfirmed) {
+                            return;
+                        }
+
+                        this.submitDecision(requestItem, {
+                            action: 'reject',
+                            decision_notes: result.value,
+                        });
+                    });
+                }
+            };
+        }
+    </script>
+
+    <div class="py-10" x-data="nurseFollowUpRequests(window.pendingFollowUpRequests)">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             @if(session('status'))
                 <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
@@ -30,9 +140,12 @@
                         </thead>
                         <tbody class="divide-y divide-slate-200 bg-white">
                             @forelse($pendingRequests as $followUp)
+                                @php
+                                    $patientName = trim((optional($followUp->patient)->first_name ?? '') . ' ' . (optional($followUp->patient)->last_name ?? '')) ?: 'Unknown Patient';
+                                @endphp
                                 <tr>
                                     <td class="px-6 py-4 text-sm text-slate-900">
-                                        {{ trim((optional($followUp->patient)->first_name ?? '') . ' ' . (optional($followUp->patient)->last_name ?? '')) ?: 'Unknown Patient' }}
+                                        {{ $patientName }}
                                     </td>
                                     <td class="px-6 py-4 text-sm text-slate-700">
                                         {{ optional(optional($followUp->consultation)->request)->concern_category ?? 'Completed Consultation' }}
@@ -41,22 +154,27 @@
                                         {{ $followUp->reason }}
                                     </td>
                                     <td class="px-6 py-4 text-sm">
-                                        <div class="grid gap-2 md:grid-cols-2">
-                                            <form method="POST" action="{{ route('nurse.follow_up_requests.forward', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id]) }}" class="space-y-2 rounded-xl border border-slate-200 p-3">
-                                                @csrf
-                                                <textarea name="decision_notes" rows="2" maxlength="2000" class="w-full rounded-lg border-slate-300 text-xs focus:border-indigo-500 focus:ring-indigo-500" placeholder="Optional nurse screening notes"></textarea>
-                                                <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 w-full">
-                                                    Forward
-                                                </button>
-                                            </form>
-
-                                            <form method="POST" action="{{ route('nurse.follow_up_requests.reject', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id]) }}" class="space-y-2 rounded-xl border border-red-200 p-3 bg-red-50">
-                                                @csrf
-                                                <textarea name="decision_notes" rows="2" maxlength="2000" class="w-full rounded-lg border-red-300 text-xs focus:border-red-500 focus:ring-red-500" placeholder="Required rejection reason" required></textarea>
-                                                <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 w-full">
-                                                    Reject
-                                                </button>
-                                            </form>
+                                        <div class="flex flex-wrap gap-2">
+                                            <button type="button" @click="forwardRequest({
+                                                id: {{ $followUp->id }},
+                                                patient_name: @js($patientName),
+                                                original_consultation: @js(optional(optional($followUp->consultation)->request)->concern_category ?? 'Completed Consultation'),
+                                                reason: @js($followUp->reason),
+                                                forward_url: @js(route('nurse.follow_up_requests.forward', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id])),
+                                                reject_url: @js(route('nurse.follow_up_requests.reject', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id]))
+                                            })" class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                                                Forward
+                                            </button>
+                                            <button type="button" @click="rejectRequest({
+                                                id: {{ $followUp->id }},
+                                                patient_name: @js($patientName),
+                                                original_consultation: @js(optional(optional($followUp->consultation)->request)->concern_category ?? 'Completed Consultation'),
+                                                reason: @js($followUp->reason),
+                                                forward_url: @js(route('nurse.follow_up_requests.forward', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id])),
+                                                reject_url: @js(route('nurse.follow_up_requests.reject', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id]))
+                                            })" class="inline-flex items-center rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700">
+                                                Reject
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>

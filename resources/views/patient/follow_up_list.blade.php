@@ -5,6 +5,46 @@
         </h2>
     </x-slot>
 
+    <script>
+        function requestFollowUp(button) {
+            const form = document.getElementById(button.getAttribute('data-form-id'));
+
+            if (!form) {
+                return;
+            }
+
+            Swal.fire({
+                title: 'Request Follow-up',
+                text: 'Tell us why you need a follow-up consultation.',
+                icon: 'question',
+                input: 'textarea',
+                inputPlaceholder: 'Reason for follow-up...',
+                inputAttributes: {
+                    'aria-label': 'Reason for follow-up'
+                },
+                showCancelButton: true,
+                confirmButtonText: 'Submit Request',
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'A reason is required.';
+                    }
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) {
+                    return;
+                }
+
+                const textarea = form.querySelector('textarea[name="reason"]');
+
+                if (textarea) {
+                    textarea.value = result.value || '';
+                }
+
+                form.submit();
+            });
+        }
+    </script>
+
     <div class="py-10">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             @if(session('status'))
@@ -16,7 +56,7 @@
             <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div class="border-b border-slate-200 bg-slate-50 px-6 py-4">
                     <p class="text-sm text-slate-600">
-                        Completed consultations from the last 7 days appear below. Open the consultation details or request a follow-up from here.
+                        Completed consultations from the last 7 days appear below.
                     </p>
                 </div>
 
@@ -40,8 +80,8 @@
                                 @endphp
                                 <tr>
                                     <td class="px-6 py-4 text-sm text-slate-900">
-                                        <div class="font-semibold">{{ $request->concern_category ?? 'Completed Consultation' }}</div>
-                                        <div class="text-slate-500">{{ $patientName }}</div>
+                                        <!-- <div class="font-semibold">{{ $request->concern_category ?? 'Completed Consultation' }}</div> -->
+                                        <div class="font-semibold">{{ $patientName }}</div>
                                     </td>
                                     <td class="px-6 py-4 text-sm text-slate-700">
                                         {{ optional($session->completed_at)->format('M d, Y @ h:i A') }}
@@ -60,13 +100,15 @@
                                                     Follow-up pending review
                                                 </span>
                                             @else
-                                                <form method="POST" action="{{ route('patient.follow_up_requests.store', ['session' => $session]) }}" class="flex flex-col gap-2 rounded-xl border border-slate-200 p-3">
-                                                    @csrf
-                                                    <textarea name="reason" rows="2" maxlength="2000" class="w-full rounded-lg border-slate-300 text-xs focus:border-indigo-500 focus:ring-indigo-500" placeholder="Reason for follow-up" required></textarea>
-                                                    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                                                
+                                                    <button type="button" data-form-id="follow-up-form-{{ $session->id }}" onclick="requestFollowUp(this)" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
                                                         Request Follow-up
                                                     </button>
-                                                </form>
+                                                    <form id="follow-up-form-{{ $session->id }}" method="POST" action="{{ route('patient.follow_up_requests.store', ['session' => $session]) }}" class="hidden">
+                                                        @csrf
+                                                        <textarea name="reason" rows="2" maxlength="2000"></textarea>
+                                                    </form>
+   
                                             @endif
                                         </div>
                                     </td>
