@@ -16,6 +16,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
+use App\Enums\NotificationType;
+use App\Services\NotificationService;
 
 class PhysicianController extends Controller
 {
@@ -163,6 +165,18 @@ class PhysicianController extends Controller
                 'started_at' => now(),
             ]);
         });
+
+        NotificationService::sendUnique(
+            $consultation->patient_id,
+            NotificationType::CONSULTATION_STARTED,
+            'Consultation Started',
+            'Your consultation has started. The physician is now available to assist you.',
+            [
+                'consultation_id' => $consultation->request_id,
+                'request_id' => $consultation->request_id,
+                'session_id' => $session->id,
+            ]
+        );
 
         return response()->json([
             'success' => true,
@@ -363,6 +377,20 @@ class PhysicianController extends Controller
             ], 422);
         }
 
+        $slot = ScheduleSlot::query()->where('slot_id', $validated['slot_id'])->first();
+
+        NotificationService::sendUnique(
+            $consultation->patient_id,
+            NotificationType::CONSULTATION_SCHEDULED,
+            'Consultation Scheduled',
+            'Your consultation is scheduled for ' . optional($slot?->slot_date)->format('M d, Y') . ' at ' . $slot?->start_time . '.',
+            [
+                'consultation_id' => $consultation->request_id,
+                'request_id' => $consultation->request_id,
+                'schedule_slot_id' => $slot?->slot_id,
+            ]
+        );
+
         return response()->json([
             'success' => true,
             'message' => 'Consultation scheduled successfully.',
@@ -389,6 +417,18 @@ class PhysicianController extends Controller
             'rejection_reason' => $validated['rejection_reason'],
             'assigned_physician_id' => Auth::id(),
         ]);
+
+        NotificationService::send(
+            $consultation->patient_id,
+            NotificationType::CONSULTATION_REVIEWED,
+            'Consultation Rejected',
+            'Your consultation request was rejected by the physician. Reason: ' . $validated['rejection_reason'],
+            [
+                'consultation_id' => $consultation->request_id,
+                'request_id' => $consultation->request_id,
+                'rejected' => true,
+            ]
+        );
 
         return response()->json([
             'success' => true,
@@ -441,7 +481,16 @@ class PhysicianController extends Controller
                 'decision_notes' => $validated['decision_notes'] ?? null,
             ]);
 
-            // TODO: Notify patient
+            NotificationService::send(
+                $followUpRequest->patient_id,
+                NotificationType::FOLLOW_UP_REJECTED,
+                'Follow-up Request Rejected',
+                'Your follow-up request was rejected. Reason: ' . ($validated['decision_notes'] ?? 'No reason provided.'),
+                [
+                    'follow_up_request_id' => $followUpRequest->id,
+                    'consultation_id' => $followUpRequest->consultation_id,
+                ]
+            );
 
             if ($request->expectsJson()) {
                 return response()->json([
@@ -462,6 +511,17 @@ class PhysicianController extends Controller
                 'decided_at' => now(),
                 'decision_notes' => $validated['decision_notes'] ?? null,
             ]);
+
+            NotificationService::sendUnique(
+                $followUpRequest->patient_id,
+                NotificationType::FOLLOW_UP_APPROVED,
+                'Follow-up Request Approved',
+                'Your follow-up request has been approved by the physician.',
+                [
+                    'follow_up_request_id' => $followUpRequest->id,
+                    'consultation_id' => $followUpRequest->consultation_id,
+                ]
+            );
 
             if ($request->expectsJson()) {
                 return response()->json([
@@ -511,7 +571,16 @@ class PhysicianController extends Controller
             return back()->withErrors(['follow_up_request' => $e->getMessage()]);
         }
 
-        // TODO: Notify patient
+        NotificationService::sendUnique(
+            $followUpRequest->patient_id,
+            NotificationType::FOLLOW_UP_APPROVED,
+            'Follow-up Request Approved',
+            'Your follow-up request has been approved and a consultation has been created.',
+            [
+                'follow_up_request_id' => $followUpRequest->id,
+                'consultation_id' => $followUpRequest->consultation_id,
+            ]
+        );
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -682,7 +751,17 @@ class PhysicianController extends Controller
             ], 422);
         }
 
-        // TODO: Notify patient
+        NotificationService::send(
+            $session->request?->patient_id,
+            NotificationType::PHYSICIAN_REQUEST,
+            'Physician-Initiated Follow-up',
+            'Your physician has scheduled a follow-up consultation for you.',
+            [
+                'consultation_id' => $session->request_id,
+                'request_id' => $session->request_id,
+                'session_id' => $session->id,
+            ]
+        );
 
         return response()->json([
             'success' => true,
@@ -1123,6 +1202,33 @@ class PhysicianController extends Controller
             $slot->update([
                 'status' => 'missed',
             ]);
+
+            $patientId = $session->request?->patient_id;
+            if ($patientId) {
+                NotificationService::sendUnique(
+                    $patientId,
+                    NotificationType::CONSULTATION_MISSED,
+                    'Consultation Missed',
+                    'Your scheduled consultation was missed. Please contact the infirmary to reschedule.',
+                    [
+                        'consultation_id' => $session->request_id,
+                        'request_id' => $session->request_id,
+                        'schedule_slot_id' => $slot->slot_id,
+                    ]
+                );
+            }
+
+            NotificationService::sendUnique(
+                $physicianId,
+                NotificationType::CONSULTATION_MISSED,
+                'Consultation Missed',
+                'A scheduled consultation slot was missed. Please reschedule the consultation.',
+                [
+                    'consultation_id' => $session->request_id,
+                    'request_id' => $session->request_id,
+                    'schedule_slot_id' => $slot->slot_id,
+                ]
+            );
         }
     }
 

@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Consultation;
 use App\Models\FollowUpRequest;
 use App\Models\User;
+use App\Enums\NotificationType;
+use App\Services\NotificationService;
 
 class NurseController extends Controller
 {
@@ -99,7 +101,17 @@ class NurseController extends Controller
             'decision_notes' => $validated['decision_notes'] ?? null,
         ]);
 
-        // TODO: Notify physician
+        NotificationService::sendToRole(
+            'physician',
+            NotificationType::FOLLOW_UP_SUBMITTED,
+            'Follow-up Request',
+            'A patient submitted a follow-up request that requires your decision.',
+            [
+                'follow_up_request_id' => $followUpRequest->id,
+                'consultation_id' => $followUpRequest->consultation_id,
+                'patient_id' => $followUpRequest->patient_id,
+            ]
+        );
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -137,7 +149,16 @@ class NurseController extends Controller
             'decision_notes' => $validated['decision_notes'],
         ]);
 
-        // TODO: Notify patient
+        NotificationService::send(
+            $followUpRequest->patient_id,
+            NotificationType::FOLLOW_UP_REJECTED,
+            'Follow-up Request Rejected',
+            'Your follow-up request was rejected. Reason: ' . $validated['decision_notes'],
+            [
+                'follow_up_request_id' => $followUpRequest->id,
+                'consultation_id' => $followUpRequest->consultation_id,
+            ]
+        );
 
         if ($request->expectsJson()) {
             return response()->json([

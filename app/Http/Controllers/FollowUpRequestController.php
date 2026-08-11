@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Consultation;
 use App\Models\ConsultationSession;
 use App\Models\FollowUpRequest;
+use App\Enums\NotificationType;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -80,8 +82,10 @@ class FollowUpRequestController extends Controller
             return back()->withErrors(['reason' => 'A follow-up consultation is already in progress for this consultation.']);
         }
 
-        DB::transaction(function () use ($session, $patient, $validated) {
-            FollowUpRequest::create([
+        $followUpRequest = null;
+
+        DB::transaction(function () use ($session, $patient, $validated, &$followUpRequest) {
+            $followUpRequest = FollowUpRequest::create([
                 'consultation_id' => $session->id,
                 'patient_id' => $patient->user_id,
                 'reason' => $validated['reason'],
@@ -89,7 +93,19 @@ class FollowUpRequestController extends Controller
             ]);
         });
 
-        // TODO: Notify nurse
+        if ($followUpRequest) {
+            NotificationService::sendToRole(
+                'nurse',
+                NotificationType::FOLLOW_UP_SUBMITTED,
+                'New Follow-up Request',
+                'A patient submitted a follow-up request that requires your review.',
+                [
+                    'follow_up_request_id' => $followUpRequest->id,
+                    'consultation_id' => $followUpRequest->consultation_id,
+                    'patient_id' => $followUpRequest->patient_id,
+                ]
+            );
+        }
 
         return redirect()
             ->route('patient.follow_up_list')

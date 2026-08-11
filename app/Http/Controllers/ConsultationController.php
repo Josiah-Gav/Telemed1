@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Log;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Support\Facades\Storage;
 use App\Models\FollowUpRequest;
+use App\Enums\NotificationType;
+use App\Services\NotificationService;
+use App\Models\User;
 
 class ConsultationController extends Controller
 {
@@ -233,6 +236,17 @@ class ConsultationController extends Controller
                 'request_status'        => 'pending',
             ]);
 
+            NotificationService::sendToRole(
+                'nurse',
+                NotificationType::CONSULTATION_SUBMITTED,
+                'New Consultation Request',
+                'A new consultation request requires your review.',
+                [
+                    'consultation_id' => $consultation->request_id,
+                    'request_id' => $consultation->request_id,
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Consultation request created and backed up to cloud successfully.',
@@ -271,6 +285,18 @@ class ConsultationController extends Controller
             'rejection_reason' => $request->input('rejection_reason'),
         ]);
 
+        NotificationService::send(
+            $consultation->patient_id,
+            NotificationType::CONSULTATION_REVIEWED,
+            'Consultation Request Rejected',
+            'Your consultation request was rejected. Reason: ' . $request->input('rejection_reason'),
+            [
+                'consultation_id' => $consultation->request_id,
+                'request_id' => $consultation->request_id,
+                'rejected' => true,
+            ]
+        );
+
         return response()->json(['success' => true, 'message' => 'Consultation request rejected successfully.']);
     }
 
@@ -295,6 +321,34 @@ class ConsultationController extends Controller
             'priority_level' => $validated['priority_level'],
         ]);
 
+        // Notify the patient that their request was reviewed.
+        NotificationService::send(
+            $consultation->patient_id,
+            NotificationType::CONSULTATION_REVIEWED,
+            'Consultation Reviewed',
+            'Your consultation request has been reviewed by the infirmary staff.',
+            [
+                'consultation_id' => $consultation->request_id,
+                'request_id' => $consultation->request_id,
+            ]
+        );
+
+        // Notify all physicians that a new consultation is ready for assignment.
+        $isHighPriority = strtolower((string) $validated['priority_level']) === 'high';
+        NotificationService::sendToRole(
+            'physician',
+            $isHighPriority ? NotificationType::HIGH_PRIORITY_CONSULTATION : NotificationType::CONSULTATION_ASSIGNED,
+            $isHighPriority ? 'High-Priority Consultation' : 'New Consultation Available',
+            $isHighPriority
+                ? 'A high-priority consultation has been approved and is waiting for a physician.'
+                : 'A new consultation has been approved and is waiting for a physician.',
+            [
+                'consultation_id' => $consultation->request_id,
+                'request_id' => $consultation->request_id,
+                'priority_level' => $consultation->priority_level,
+            ]
+        );
+
         return response()->json(['success' => true, 'message' => 'Consultation request approved successfully.']);
     }
 
@@ -316,6 +370,20 @@ class ConsultationController extends Controller
         $consultation->update([
             'request_status' => 'cancelled',
         ]);
+
+        // Notify the assigned nurse (if any) that the patient cancelled the request.
+        if ($consultation->assigned_nurse_id) {
+            NotificationService::send(
+                $consultation->assigned_nurse_id,
+                NotificationType::SYSTEM_ALERT,
+                'Consultation Cancelled',
+                'A patient cancelled their consultation request.',
+                [
+                    'consultation_id' => $consultation->request_id,
+                    'request_id' => $consultation->request_id,
+                ]
+            );
+        }
 
         return response()->json(['success' => true, 'message' => 'Consultation request cancelled successfully.']);
     }

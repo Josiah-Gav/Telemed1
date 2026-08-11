@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\ConsultationSession;
 use App\Models\Message;
 use App\Models\User;
+use App\Enums\NotificationType;
+use App\Services\NotificationService;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -126,6 +128,8 @@ class ConsultationMessageController extends Controller
 
         $this->setTyping((int) $session->id, (int) Auth::user()->user_id, false);
         $this->touchLastSeen((int) $session->id, (int) Auth::user()->user_id);
+
+        $this->notifyMessageRecipients($session, $body !== '', !empty($files));
 
         return response()->json([
             'success' => true,
@@ -269,6 +273,20 @@ class ConsultationMessageController extends Controller
 
         $session->refresh();
         $consultationRequest = $session->request;
+
+        if ($consultationRequest) {
+            NotificationService::sendUnique(
+                $consultationRequest->patient_id,
+                NotificationType::CONSULTATION_COMPLETED,
+                'Consultation Completed',
+                'Your consultation has been completed. You can view the summary and prescription in your consultation history.',
+                [
+                    'consultation_id' => $consultationRequest->request_id,
+                    'request_id' => $consultationRequest->request_id,
+                    'session_id' => $session->id,
+                ]
+            );
+        }
 
         return response()->json([
             'success' => true,
@@ -458,6 +476,63 @@ class ConsultationMessageController extends Controller
         }
 
         return Storage::disk('public')->download($attachment->file_path, $attachment->file_name);
+    }
+
+    /**
+     * Notify the other participant in a consultation session when a message
+     * or attachment is sent.
+     */
+    private function notifyMessageRecipients(ConsultationSession $session, bool $hasMessage, bool $hasAttachments): void
+    {
+        if (!$hasMessage && !$hasAttachments) {
+            return;
+        }
+
+        $session->loadMissing(['request.patient', 'physician']);
+
+        $currentUser = Auth::user();
+        $currentUserId = (int) $currentUser->user_id;
+
+        $recipientUser = null;
+        if ($currentUser->role === 'patient') {
+            $recipientUser = $session->physician;
+        } elseif ($currentUser->role === 'physician') {
+            $recipientUser = optional($session->request)->patient;
+        }
+
+        if (!$recipientUser) {
+            return;
+        }
+
+        $recipientId = (int) $recipientUser->user_id;
+
+        if ($hasMessage) {
+            NotificationService::send(
+                $recipientId,
+                NotificationType::NEW_MESSAGE,
+                'New Message',
+                'You received a new message for consultation #' . $session->request_id . '.',
+                [
+                    'consultation_id' => $session->request_id,
+                    'request_id' => $session->request_id,
+                    'session_id' => $session->id,
+                ]
+            );
+        }
+
+        if ($hasAttachments) {
+            NotificationService::send(
+                $recipientId,
+                NotificationType::NEW_ATTACHMENT,
+                'New Attachment',
+                'A new attachment was uploaded to consultation #' . $session->request_id . '.',
+                [
+                    'consultation_id' => $session->request_id,
+                    'request_id' => $session->request_id,
+                    'session_id' => $session->id,
+                ]
+            );
+        }
     }
 
     private function setTyping(int $sessionId, int $userId, bool $isTyping): void

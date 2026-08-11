@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\ConsultationMessageController;
 use App\Http\Controllers\FollowUpRequestController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PresenceController;
 use Illuminate\Support\Facades\Route;
 
@@ -18,6 +19,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Presence heartbeat
     Route::post('/presence/heartbeat', [PresenceController::class, 'heartbeat'])
         ->name('presence.heartbeat');
+
+    // In-app notifications
+    Route::get('/notifications', [NotificationController::class, 'index'])
+        ->name('notifications.index');
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount'])
+        ->name('notifications.unread_count');
+    Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])
+        ->name('notifications.read');
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead'])
+        ->name('notifications.read_all');
 
     // 1. Role-based universal dashboard entry point
     Route::get('/dashboard', [DashboardController::class, 'index'])
