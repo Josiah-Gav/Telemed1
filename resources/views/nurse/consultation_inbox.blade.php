@@ -11,6 +11,10 @@
                 'request_id' => $request->request_id,
                 'patient_id' => $request->patient_id,
                 'patient_name' => trim(optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name) ?: 'Unknown Patient',
+                'patient_is_online' => $request->patient
+                    && $request->patient->online_status === 'online'
+                    && $request->patient->last_seen_at
+                    && $request->patient->last_seen_at->gt(now()->subMinutes(2)),
                 'concern_category' => $request->concern_category,
                 'submitted_at' => $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : null,
                 'request_status' => $request->request_status,
@@ -274,7 +278,16 @@
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     <template x-for="request in pendingRequests" :key="`pending-${request.request_id}`">
                                         <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="request.patient_name"></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                <span class="inline-flex items-center gap-2">
+                                                    <span
+                                                        class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
+                                                        :class="request.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
+                                                        :title="request.patient_is_online ? 'Online' : 'Offline'"
+                                                    ></span>
+                                                    <span x-text="request.patient_name"></span>
+                                                </span>
+                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="summarizeSymptoms(request.symptoms_desc)"></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                 <span class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold" :class="severityBadgeClass(request.symptoms_desc)" x-text="severityText(request.symptoms_desc)"></span>
@@ -315,7 +328,16 @@
                                     <tbody class="bg-white divide-y divide-gray-200">
                                         <template x-for="request in assignedToCurrentNurse" :key="`mine-${request.request_id}`">
                                             <tr>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="request.patient_name"></td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    <span class="inline-flex items-center gap-2">
+                                                        <span
+                                                            class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
+                                                            :class="request.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
+                                                            :title="request.patient_is_online ? 'Online' : 'Offline'"
+                                                        ></span>
+                                                        <span x-text="request.patient_name"></span>
+                                                    </span>
+                                                </td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="summarizeSymptoms(request.symptoms_desc)"></td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                     <span class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold" :class="severityBadgeClass(request.symptoms_desc)" x-text="severityText(request.symptoms_desc)"></span>
@@ -356,7 +378,16 @@
                                     <tbody class="bg-white divide-y divide-gray-200">
                                         <template x-for="request in assignedToOtherNurses" :key="`other-${request.request_id}`">
                                             <tr>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="request.patient_name"></td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    <span class="inline-flex items-center gap-2">
+                                                        <span
+                                                            class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
+                                                            :class="request.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
+                                                            :title="request.patient_is_online ? 'Online' : 'Offline'"
+                                                        ></span>
+                                                        <span x-text="request.patient_name"></span>
+                                                    </span>
+                                                </td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="request.assigned_nurse_name || '{{ __('Unassigned') }}'"></td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="request.submitted_at || '{{ __('Unknown') }}'"></td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm">

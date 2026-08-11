@@ -42,5 +42,34 @@
                 {{ $slot }}
             </main>
         </div>
+
+        @auth
+        <script>
+            (function () {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+                if (!csrfToken) {
+                    return;
+                }
+
+                function sendHeartbeat() {
+                    fetch('{{ route('presence.heartbeat') }}', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        }
+                    }).catch(() => {});
+                }
+
+                // Send an initial heartbeat on page load
+                sendHeartbeat();
+
+                // Send a heartbeat every 60 seconds to keep presence fresh
+                window.setInterval(sendHeartbeat, 60000);
+            })();
+        </script>
+        @endauth
     </body>
 </html>

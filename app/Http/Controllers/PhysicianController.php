@@ -195,6 +195,7 @@ class PhysicianController extends Controller
             return [
                 'request_id' => $consultation->request_id,
                 'patient_name' => trim(optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name) ?: 'Unknown Patient',
+                'patient_is_online' => $this->isUserOnline($consultation->patient),
                 'assigned_nurse_name' => trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: 'Unassigned',
                 'concern_category' => $consultation->concern_category,
                 'submitted_at' => $consultation->submitted_at ? $consultation->submitted_at->format('Y-m-d H:i') : null,
@@ -212,6 +213,14 @@ class PhysicianController extends Controller
                 'file_attachments' => array_values($consultation->file_attachments ?? []),
             ];
         })->values()->all();
+    }
+
+    private function isUserOnline(?User $user): bool
+    {
+        return $user
+            && $user->online_status === 'online'
+            && $user->last_seen_at
+            && $user->last_seen_at->gt(now()->subMinutes(2));
     }
 
     public function availableScheduleSlotsForConsultation(User $physician, Consultation $consultation): JsonResponse

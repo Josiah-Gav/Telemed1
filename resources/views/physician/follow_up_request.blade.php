@@ -206,7 +206,18 @@
                                 @endphp
                                 <tr>
                                     <td class="px-6 py-4 text-sm text-slate-900">
-                                        {{ $patientName }}
+                                        <span class="inline-flex items-center gap-2">
+                                            @if(
+                                                optional($followUp->patient)->online_status === 'online'
+                                                && optional($followUp->patient)->last_seen_at
+                                                && $followUp->patient->last_seen_at->gt(now()->subMinutes(2))
+                                            )
+                                                <span class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0 bg-emerald-500" title="Online"></span>
+                                            @else
+                                                <span class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0 bg-slate-300" title="Offline"></span>
+                                            @endif
+                                            {{ $patientName }}
+                                        </span>
                                     </td>
                                     <td class="px-6 py-4 text-sm text-slate-700 max-w-md">
                                         {{ $followUp->reason }}

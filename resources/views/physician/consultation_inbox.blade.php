@@ -378,7 +378,16 @@
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     <template x-for="consultation in normalPriorityConsultations" :key="`normal-${consultation.request_id}`">
                                         <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.patient_name"></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                <span class="inline-flex items-center gap-2">
+                                                    <span
+                                                        class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
+                                                        :class="consultation.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
+                                                        :title="consultation.patient_is_online ? 'Online' : 'Offline'"
+                                                    ></span>
+                                                    <span x-text="consultation.patient_name"></span>
+                                                </span>
+                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="summarizeSymptoms(consultation.symptoms_desc)"></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.assigned_nurse_name || '{{ __('Unassigned') }}'"></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.submitted_at || '{{ __('Unknown') }}'"></td>
@@ -418,7 +427,16 @@
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     <template x-for="consultation in highPriorityConsultations" :key="`high-${consultation.request_id}`">
                                         <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.patient_name"></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                <span class="inline-flex items-center gap-2">
+                                                    <span
+                                                        class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
+                                                        :class="consultation.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
+                                                        :title="consultation.patient_is_online ? 'Online' : 'Offline'"
+                                                    ></span>
+                                                    <span x-text="consultation.patient_name"></span>
+                                                </span>
+                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="summarizeSymptoms(consultation.symptoms_desc)"></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.assigned_nurse_name || '{{ __('Unassigned') }}'"></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.submitted_at || '{{ __('Unknown') }}'"></td>
@@ -460,7 +478,16 @@
                     <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
                         <div>
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Patient Name') }}</p>
-                            <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedConsultation?.patient_name"></p>
+                            <p class="mt-1 text-sm font-medium text-gray-900">
+                                <span class="inline-flex items-center gap-2">
+                                    <span
+                                        class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
+                                        :class="selectedConsultation?.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
+                                        :title="selectedConsultation?.patient_is_online ? 'Online' : 'Offline'"
+                                    ></span>
+                                    <span x-text="selectedConsultation?.patient_name"></span>
+                                </span>
+                            </p>
                         </div>
                         <div>
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Assigned Nurse') }}</p>

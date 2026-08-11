@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\ConsultationMessageController;
 use App\Http\Controllers\FollowUpRequestController;
+use App\Http\Controllers\PresenceController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -14,6 +15,10 @@ Route::get('/', function () {
 // --- EVERYTHING INSIDE THIS BLOCK REQUIRES LOGIN ---
 Route::middleware(['auth', 'verified'])->group(function () {
     
+    // Presence heartbeat
+    Route::post('/presence/heartbeat', [PresenceController::class, 'heartbeat'])
+        ->name('presence.heartbeat');
+
     // 1. Role-based universal dashboard entry point
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
@@ -134,6 +139,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('consultations.messaging.typing');
     Route::get('/consultation-sessions/{session}/presence', [ConsultationMessageController::class, 'presence'])
         ->name('consultations.messaging.presence');
+    Route::post('/consultation-sessions/{session}/offline', [ConsultationMessageController::class, 'markOffline'])
+        ->name('consultations.messaging.offline');
     Route::get('/consultation-sessions/{session}/prescription/download', [ConsultationMessageController::class, 'downloadPrescription'])
         ->name('consultations.messaging.prescription.download');
     Route::get('/consultation-message-attachments/{attachment}/download', [ConsultationMessageController::class, 'downloadAttachment'])

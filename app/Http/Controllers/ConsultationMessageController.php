@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ConsultationSession;
 use App\Models\Message;
+use App\Models\User;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -398,14 +399,33 @@ class ConsultationMessageController extends Controller
         $peerLastSeen = $peerUserId
             ? Cache::get($this->lastSeenKey((int) $session->id, $peerUserId))
             : null;
+        $peerIsOnline = $peerUser
+            && $peerUser->online_status === 'online'
+            && $peerUser->last_seen_at
+            && $peerUser->last_seen_at->gt(now()->subMinutes(2));
 
         return response()->json([
             'peer' => [
                 'user_id' => $peerUserId,
                 'name' => $peerName !== '' ? $peerName : null,
                 'is_typing' => $peerIsTyping,
+                'is_online' => (bool) $peerIsOnline,
                 'last_seen_at' => $peerLastSeen,
             ],
+        ]);
+    }
+
+    public function markOffline(ConsultationSession $session): JsonResponse
+    {
+        $this->authorize('viewMessaging', $session);
+
+        User::where('user_id', (int) Auth::user()->user_id)
+            ->update([
+                'online_status' => 'offline',
+            ]);
+
+        return response()->json([
+            'success' => true,
         ]);
     }
 
@@ -455,6 +475,12 @@ class ConsultationMessageController extends Controller
     private function touchLastSeen(int $sessionId, int $userId): void
     {
         Cache::put($this->lastSeenKey($sessionId, $userId), now()->toIso8601String(), now()->addHours(24));
+
+        User::where('user_id', $userId)
+            ->update([
+                'online_status' => 'online',
+                'last_seen_at' => now(),
+            ]);
     }
 
     private function buildClinicalDetailsPayload(ConsultationSession $session): array

@@ -190,6 +190,7 @@ class NurseController extends Controller
                 'request_id' => $request->request_id,
                 'patient_id' => $request->patient_id,
                 'patient_name' => trim(optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name) ?: 'Unknown Patient',
+                'patient_is_online' => $this->isUserOnline($request->patient),
                 'concern_category' => $request->concern_category,
                 'submitted_at' => $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : null,
                 'request_status' => $request->request_status,
@@ -205,5 +206,13 @@ class NurseController extends Controller
                 }, $request->file_attachments ?? []),
             ];
         })->values()->all();
+    }
+
+    private function isUserOnline(?User $user): bool
+    {
+        return $user
+            && $user->online_status === 'online'
+            && $user->last_seen_at
+            && $user->last_seen_at->gt(now()->subMinutes(2));
     }
 }

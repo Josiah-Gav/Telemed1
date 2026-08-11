@@ -69,7 +69,16 @@
                             @if($session->completed_at)
                                 <p><span class="font-semibold text-slate-800">Completed:</span> {{ $session->completed_at->format('M d, Y @ h:i A') }}</p>
                             @endif
-                            <p class="text-xs text-slate-500" x-text="presenceText"></p>
+                            <p class="text-xs text-slate-500" x-show="!peerIsTyping">
+                                <span class="inline-flex items-center gap-1.5">
+                                    <span
+                                        class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
+                                        :class="peerOnline ? 'bg-emerald-500' : 'bg-slate-400'"
+                                    ></span>
+                                    <span :class="peerOnline ? 'text-emerald-600 font-semibold' : 'text-slate-500'" x-text="peerOnline ? 'Online' : 'Offline'"></span>
+                                </span>
+                            </p>
+                            <p class="text-xs text-slate-500" x-show="peerIsTyping" x-text="presenceText"></p>
                         </div>
                     </div>
                 </div>
@@ -401,6 +410,10 @@
                 typingTimeout: null,
                 isTyping: false,
                 presenceText: 'Checking participant status...',
+                peerOnline: false,
+                peerIsTyping: false,
+                peerName: '',
+                offlineUrl: '{{ route('consultations.messaging.offline', $session) }}',
                 saveMessage: '',
                 consultationStatus: @js($session->consultation_status),
                 consultationCompletedAt: @js(optional($session->completed_at)?->toIso8601String()),
@@ -439,6 +452,19 @@
                         }
 
                         this.sendTypingState(false);
+                        this.markOffline();
+                    });
+                },
+                markOffline() {
+                    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+
+                    $.ajax({
+                        url: this.offlineUrl,
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
                     });
                 },
                 isMine(msg) {
@@ -543,8 +569,12 @@
                         success: (data) => {
                             const peer = data.peer || {};
 
+                            this.peerName = peer.name || 'Participant';
+                            this.peerOnline = Boolean(peer.is_online);
+                            this.peerIsTyping = Boolean(peer.is_typing);
+
                             if (peer.is_typing) {
-                                this.presenceText = (peer.name || 'Participant') + ' is typing...';
+                                this.presenceText = this.peerName + ' is typing...';
                                 return;
                             }
 
