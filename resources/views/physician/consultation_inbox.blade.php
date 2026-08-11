@@ -5,70 +5,50 @@
         </h2>
     </x-slot>
 
-    <script>
-        window.physicianInboxData = @json($physicianInboxData);
+    @php
+        $currentPhysicianId = auth()->id();
 
-        function physicianConsultationInbox(initialData, refreshUrl) {
+        $allAssignedConsultations = $normalPriorityConsultations
+            ->concat($highPriorityConsultations)
+            ->unique('request_id')
+            ->values();
+
+        $assignedConsultationsJson = $allAssignedConsultations->map(function ($consultation) use ($currentPhysicianId) {
+            return [
+                'request_id' => $consultation->request_id,
+                'patient_name' => trim(optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name) ?: 'Unknown Patient',
+                'patient_is_online' => $consultation->patient
+                    && $consultation->patient->online_status === 'online'
+                    && $consultation->patient->last_seen_at
+                    && $consultation->patient->last_seen_at->gt(now()->subMinutes(2)),
+                'assigned_nurse_name' => trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: 'Unassigned',
+                'concern_category' => $consultation->concern_category,
+                'submitted_at' => $consultation->submitted_at ? $consultation->submitted_at->format('Y-m-d H:i') : null,
+                'request_status' => $consultation->request_status,
+                'priority_level' => $consultation->priority_level,
+                'symptoms_desc' => $consultation->symptoms_desc,
+                'online_reason' => $consultation->online_reason,
+                'reject_url' => route('physician.consultations.reject_reviewed', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
+                'start_url' => route('physician.consultations.start', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
+                'schedule_url' => route('physician.consultations.schedule', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
+                'available_slots_url' => route('physician.consultations.available_slots', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
+                'file_attachments' => array_values($consultation->file_attachments ?? []),
+            ];
+        })->toArray();
+    @endphp
+
+    <script>
+        window.assignedConsultations = @json($assignedConsultationsJson);
+
+        function physicianConsultationInbox(consultations) {
             return {
                 activeTab: 'normal',
                 showModal: false,
                 selectedConsultation: null,
-                normalPriorityConsultations: initialData.normalPriorityConsultations || [],
-                highPriorityConsultations: initialData.highPriorityConsultations || [],
-                refreshUrl,
-                pollTimer: null,
-                init() {
-                    if (this.pollTimer) {
-                        return;
-                    }
-
-                    this.poll();
-                    this.pollTimer = window.setInterval(() => this.poll(), 5000);
-                },
-                get normalCount() {
-                    return this.normalPriorityConsultations.length;
-                },
-                get highCount() {
-                    return this.highPriorityConsultations.length;
-                },
-                get consultations() {
-                    return [
-                        ...this.normalPriorityConsultations,
-                        ...this.highPriorityConsultations,
-                    ];
-                },
-                poll() {
-                    $.ajax({
-                        url: this.refreshUrl,
-                        method: 'GET',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        success: (data) => {
-                            this.normalPriorityConsultations = Array.isArray(data?.normalPriorityConsultations) ? data.normalPriorityConsultations : [];
-                            this.highPriorityConsultations = Array.isArray(data?.highPriorityConsultations) ? data.highPriorityConsultations : [];
-                            this.syncSelectedConsultation();
-                        }
-                    });
-                },
-                syncSelectedConsultation() {
-                    if (!this.showModal || !this.selectedConsultation) {
-                        return;
-                    }
-
-                    const selectedRequestId = Number(this.selectedConsultation.request_id);
-                    const updatedConsultation = this.consultations.find((consultation) => Number(consultation.request_id) === selectedRequestId);
-
-                    if (updatedConsultation) {
-                        this.selectedConsultation = updatedConsultation;
-                        return;
-                    }
-
-                    this.closeModal();
-                },
+                consultations: consultations,
                 openModal(requestId) {
-                    this.selectedConsultation = this.consultations.find((consultation) => Number(consultation.request_id) === Number(requestId)) || null;
-                    this.showModal = Boolean(this.selectedConsultation);
+                    this.selectedConsultation = this.consultations.find((consultation) => consultation.request_id === requestId);
+                    this.showModal = true;
                 },
                 closeModal() {
                     this.showModal = false;
@@ -155,7 +135,6 @@
                     }
 
                     const csrfToken = $('meta[name="csrf-token"]').attr('content');
-
                     if (!csrfToken) {
                         Swal.fire('Error', 'Missing CSRF token.', 'error');
                         return;
@@ -180,7 +159,7 @@
                                     icon: 'success',
                                     confirmButtonText: 'OK'
                                 }).then(() => {
-                                    this.poll();
+                                    window.location.reload();
                                 });
                             } else {
                                 Swal.fire('Error', data.message || 'Something went wrong.', 'error');
@@ -199,7 +178,6 @@
                     }
 
                     const csrfToken = $('meta[name="csrf-token"]').attr('content');
-
                     if (!csrfToken) {
                         Swal.fire('Error', 'Missing CSRF token.', 'error');
                         return;
@@ -221,7 +199,7 @@
                         success: (data) => {
                             if (data.success) {
                                 Swal.fire('Scheduled!', data.message, 'success').then(() => {
-                                    this.poll();
+                                    window.location.reload();
                                 });
                             } else {
                                 Swal.fire('Error', data.message || 'Unable to schedule consultation.', 'error');
@@ -321,7 +299,7 @@
                         success: (data) => {
                             if (data.success) {
                                 Swal.fire('Rejected!', data.message, 'success').then(() => {
-                                    this.poll();
+                                    window.location.reload();
                                 });
                             } else {
                                 Swal.fire('Error', data.message || 'Unable to reject consultation.', 'error');
@@ -337,7 +315,7 @@
         }
     </script>
 
-    <div class="py-12" x-data="physicianConsultationInbox(window.physicianInboxData, '{{ route('physician.consultation_inbox.refresh', ['physician' => $physician]) }}')" x-init="init()" @keydown.escape.window="closeModal()">
+    <div class="py-12" x-data="physicianConsultationInbox(window.assignedConsultations)" @keydown.escape.window="closeModal()">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
@@ -348,7 +326,7 @@
                             :class="activeTab === 'normal' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
                             class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
-                            {{ __('Normal Priority') }} (<span x-text="normalCount"></span>)
+                            {{ __('Normal Priority') }} ({{ $normalPriorityConsultations->count() }})
                         </button>
                         <button
                             type="button"
@@ -356,106 +334,140 @@
                             :class="activeTab === 'high' ? 'bg-red-600 text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
                             class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
-                            {{ __('High Priority') }} (<span x-text="highCount"></span>)
+                            {{ __('High Priority') }} ({{ $highPriorityConsultations->count() }})
                         </button>
                     </div>
 
                     <div x-show="activeTab === 'normal'" x-cloak>
-                        <p class="text-sm text-gray-500" x-show="normalCount === 0">{{ __('No assigned consultations with normal priority.') }}</p>
-                        <div class="overflow-x-auto" x-show="normalCount > 0">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Assigned Nurse') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Priority') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    <template x-for="consultation in normalPriorityConsultations" :key="`normal-${consultation.request_id}`">
+                        @if($normalPriorityConsultations->isEmpty())
+                            <p class="text-sm text-gray-500">{{ __('No assigned consultations with normal priority.') }}</p>
+                        @else
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
                                         <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                <span class="inline-flex items-center gap-2">
-                                                    <span
-                                                        class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
-                                                        :class="consultation.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
-                                                        :title="consultation.patient_is_online ? 'Online' : 'Offline'"
-                                                    ></span>
-                                                    <span x-text="consultation.patient_name"></span>
-                                                </span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="summarizeSymptoms(consultation.symptoms_desc)"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.assigned_nurse_name || '{{ __('Unassigned') }}'"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.submitted_at || '{{ __('Unknown') }}'"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" :class="requestStatusBadgeClass(consultation.request_status)" x-text="consultation.request_status ? consultation.request_status.charAt(0).toUpperCase() + consultation.request_status.slice(1) : '{{ __('N/A') }}'"></span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" :class="priorityBadgeClass(consultation.priority_level)" x-text="consultation.priority_level || '{{ __('Normal') }}'"></span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                <button type="button" @click="openModal(consultation.request_id)" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
-                                                    {{ __('Review') }}
-                                                </button>
-                                            </td>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Assigned Nurse') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Priority') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
                                         </tr>
-                                    </template>
-                                </tbody>
-                            </table>
-                        </div>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        @foreach($normalPriorityConsultations as $consultation)
+                                            <tr>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($consultation->patient)->first_name ? optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name : __('Unknown Patient') }}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    @php
+                                                        $symptomsDisplay = __('N/A');
+                                                        $symptomsData = $consultation->symptoms_desc;
+
+                                                        if (!empty($symptomsData)) {
+                                                            if (is_array($symptomsData)) {
+                                                                $symptomsDisplay = collect($symptomsData)
+                                                                    ->map(function ($item) {
+                                                                        return is_array($item) ? ($item['name'] ?? null) : $item;
+                                                                    })
+                                                                    ->filter()
+                                                                    ->implode(', ');
+                                                            } else {
+                                                                $symptomsDisplay = $symptomsData;
+                                                            }
+                                                        }
+                                                    @endphp
+                                                    {{ $symptomsDisplay }}
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: __('Unassigned') }}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $consultation->submitted_at ? $consultation->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100">
+                                                        {{ ucfirst($consultation->request_status) }}
+                                                    </span>
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-100">
+                                                        {{ $consultation->priority_level ?? __('Normal') }}
+                                                    </span>
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <button type="button" @click="openModal({{ $consultation->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
+                                                        {{ __('Review') }}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
                     </div>
 
                     <div x-show="activeTab === 'high'" x-cloak>
-                        <p class="text-sm text-gray-500" x-show="highCount === 0">{{ __('No assigned consultations with high priority.') }}</p>
-                        <div class="overflow-x-auto" x-show="highCount > 0">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Assigned Nurse') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Priority') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    <template x-for="consultation in highPriorityConsultations" :key="`high-${consultation.request_id}`">
+                        @if($highPriorityConsultations->isEmpty())
+                            <p class="text-sm text-gray-500">{{ __('No assigned consultations with high priority.') }}</p>
+                        @else
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
                                         <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                <span class="inline-flex items-center gap-2">
-                                                    <span
-                                                        class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
-                                                        :class="consultation.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
-                                                        :title="consultation.patient_is_online ? 'Online' : 'Offline'"
-                                                    ></span>
-                                                    <span x-text="consultation.patient_name"></span>
-                                                </span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="summarizeSymptoms(consultation.symptoms_desc)"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.assigned_nurse_name || '{{ __('Unassigned') }}'"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.submitted_at || '{{ __('Unknown') }}'"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" :class="requestStatusBadgeClass(consultation.request_status)" x-text="consultation.request_status ? consultation.request_status.charAt(0).toUpperCase() + consultation.request_status.slice(1) : '{{ __('N/A') }}'"></span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" :class="priorityBadgeClass(consultation.priority_level)" x-text="consultation.priority_level || '{{ __('High') }}'"></span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                <button type="button" @click="openModal(consultation.request_id)" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
-                                                    {{ __('Review') }}
-                                                </button>
-                                            </td>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Assigned Nurse') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Priority') }}</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
                                         </tr>
-                                    </template>
-                                </tbody>
-                            </table>
-                        </div>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        @foreach($highPriorityConsultations as $consultation)
+                                            <tr>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($consultation->patient)->first_name ? optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name : __('Unknown Patient') }}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    @php
+                                                        $symptomsDisplay = __('N/A');
+                                                        $symptomsData = $consultation->symptoms_desc;
+
+                                                        if (!empty($symptomsData)) {
+                                                            if (is_array($symptomsData)) {
+                                                                $symptomsDisplay = collect($symptomsData)
+                                                                    ->map(function ($item) {
+                                                                        return is_array($item) ? ($item['name'] ?? null) : $item;
+                                                                    })
+                                                                    ->filter()
+                                                                    ->implode(', ');
+                                                            } else {
+                                                                $symptomsDisplay = $symptomsData;
+                                                            }
+                                                        }
+                                                    @endphp
+                                                    {{ $symptomsDisplay }}
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: __('Unassigned') }}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $consultation->submitted_at ? $consultation->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100">
+                                                        {{ ucfirst($consultation->request_status) }}
+                                                    </span>
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold text-red-700 bg-red-100">
+                                                        {{ $consultation->priority_level ?? __('High') }}
+                                                    </span>
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <button type="button" @click="openModal({{ $consultation->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
+                                                        {{ __('Review') }}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -502,18 +514,12 @@
                         </div>
                         <div>
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Status') }}</p>
-                            <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedConsultation?.request_status ? selectedConsultation.request_status.charAt(0).toUpperCase() + selectedConsultation.request_status.slice(1) : '{{ __('N/A') }}'"></p>
+                            <p class="mt-1 inline-flex items-center rounded-full px-2 py-1 text-sm font-semibold" :class="requestStatusBadgeClass(selectedConsultation?.request_status)" x-text="selectedConsultation?.request_status ? selectedConsultation.request_status.charAt(0).toUpperCase() + selectedConsultation.request_status.slice(1) : '{{ __('N/A') }}'"></p>
                         </div>
                         <div>
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Priority') }}</p>
-                            <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedConsultation?.priority_level ?? '{{ __('N/A') }}'"></p>
+                            <p class="mt-1 inline-flex items-center rounded-full px-2 py-1 text-sm font-semibold" :class="priorityBadgeClass(selectedConsultation?.priority_level)" x-text="selectedConsultation?.priority_level ?? '{{ __('N/A') }}'"></p>
                         </div>
-                    </div>
-
-                    <div class="rounded-xl border border-gray-200 bg-indigo-50 p-3" x-show="selectedConsultation?.scheduled_slot" x-cloak>
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-indigo-600">{{ __('Scheduled Slot') }}</p>
-                        <p class="mt-2 text-sm font-semibold text-indigo-900" x-text="selectedConsultation?.scheduled_slot ? `${selectedConsultation.scheduled_slot.slot_date} ${selectedConsultation.scheduled_slot.label}` : ''"></p>
-                        <p class="mt-1 text-xs text-indigo-700" x-text="selectedConsultation?.can_start_message || ''"></p>
                     </div>
 
                     <div class="rounded-xl border border-gray-200 p-3">
@@ -549,7 +555,7 @@
                     </div>
                 </div>
 
-                <div class="flex border-t border-gray-200 bg-gray-50 px-4 py-3 sm:justify-end">
+                <div class="flex flex-wrap gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:justify-end">
                     <button type="button" @click="closeModal()" class="inline-flex justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100">
                         {{ __('Close') }}
                     </button>
@@ -590,9 +596,8 @@
                     <template x-if="selectedConsultation && ['reviewed', 'assigned', 'scheduled'].includes(selectedConsultation.request_status)">
                         <button type="button" @click="Swal.fire({
                             title: 'Start Consultation',
-                            text: selectedConsultation?.can_start ? 'Are you sure you want to start this consultation?' : (selectedConsultation?.can_start_message || 'You cannot start this consultation yet.'),
+                            text: 'Are you sure you want to start this consultation?',
                             icon: 'question',
-                            showConfirmButton: selectedConsultation?.can_start,
                             showCancelButton: true,
                             confirmButtonText: 'Yes, start it!',
                             cancelButtonText: 'Cancel'
@@ -601,8 +606,6 @@
                                 startConsultation();
                             }
                         })"
-                        :disabled="!selectedConsultation?.can_start"
-                        :class="selectedConsultation?.can_start ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-400 cursor-not-allowed'"
                         class="inline-flex justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
                             {{ __('Start') }}
                         </button>

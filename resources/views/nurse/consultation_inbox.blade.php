@@ -6,7 +6,13 @@
     </x-slot>
 
     @php
-        $serializeRequest = function ($request) {
+        $allInboxRequests = $pendingRequests
+            ->concat($assignedToCurrentNurse)
+            ->concat($assignedToOtherNurses)
+            ->unique('request_id')
+            ->values();
+
+        $inboxRequestsJson = $allInboxRequests->map(function ($request) {
             return [
                 'request_id' => $request->request_id,
                 'patient_id' => $request->patient_id,
@@ -25,89 +31,28 @@
                 'priority_level' => $request->priority_level,
                 'symptoms_desc' => $request->symptoms_desc,
                 'online_reason' => $request->online_reason,
-                'file_attachments' => array_map(function ($path) use ($request) {
-                    return url('/consultations/' . $request->request_id . '/attachments/' . basename($path));
+                'file_attachments' => array_map(function ($p) use ($request) {
+                    return url('/consultations/' . $request->request_id . '/attachments/' . basename($p));
                 }, $request->file_attachments ?? []),
             ];
-        };
-
-        $nurseInboxData = [
-            'pendingRequests' => $pendingRequests->map($serializeRequest)->values()->toArray(),
-            'assignedToCurrentNurse' => $assignedToCurrentNurse->map($serializeRequest)->values()->toArray(),
-            'assignedToOtherNurses' => $assignedToOtherNurses->map($serializeRequest)->values()->toArray(),
-        ];
+        })->toArray();
     @endphp
 
     <script>
-        window.nurseInboxData = @json($nurseInboxData);
+        window.inboxRequests = @json($inboxRequestsJson);
 
-        function consultationInbox(initialData, refreshUrl) {
+        function consultationInbox(requests) {
             return {
                 showModal: false,
                 selectedRequest: null,
+                requests: requests,
                 activeTab: 'pending',
-                pendingRequests: initialData.pendingRequests || [],
-                assignedToCurrentNurse: initialData.assignedToCurrentNurse || [],
-                assignedToOtherNurses: initialData.assignedToOtherNurses || [],
-                refreshUrl,
-                pollTimer: null,
-                init() {
-                    if (this.pollTimer) {
-                        return;
-                    }
-
-                    this.poll();
-                    this.pollTimer = window.setInterval(() => this.poll(), 5000);
-                },
-                get pendingCount() {
-                    return this.pendingRequests.length;
-                },
-                get assignedCount() {
-                    return this.assignedToCurrentNurse.length + this.assignedToOtherNurses.length;
-                },
-                get allRequests() {
-                    return [
-                        ...this.pendingRequests,
-                        ...this.assignedToCurrentNurse,
-                        ...this.assignedToOtherNurses,
-                    ];
-                },
-                poll() {
-                    $.ajax({
-                        url: this.refreshUrl,
-                        method: 'GET',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        success: (data) => {
-                            this.pendingRequests = Array.isArray(data?.pendingRequests) ? data.pendingRequests : [];
-                            this.assignedToCurrentNurse = Array.isArray(data?.assignedToCurrentNurse) ? data.assignedToCurrentNurse : [];
-                            this.assignedToOtherNurses = Array.isArray(data?.assignedToOtherNurses) ? data.assignedToOtherNurses : [];
-                            this.syncSelectedRequest();
-                        }
-                    });
-                },
-                syncSelectedRequest() {
-                    if (!this.showModal || !this.selectedRequest) {
-                        return;
-                    }
-
-                    const selectedRequestId = Number(this.selectedRequest.request_id);
-                    const updatedRequest = this.allRequests.find((request) => Number(request.request_id) === selectedRequestId);
-
-                    if (updatedRequest) {
-                        this.selectedRequest = updatedRequest;
-                        return;
-                    }
-
-                    this.closeModal();
-                },
                 setTab(tab) {
                     this.activeTab = tab;
                 },
                 openModal(requestId) {
-                    this.selectedRequest = this.allRequests.find((request) => Number(request.request_id) === Number(requestId)) || null;
-                    this.showModal = Boolean(this.selectedRequest);
+                    this.selectedRequest = this.requests.find((request) => request.request_id === requestId);
+                    this.showModal = true;
                 },
                 closeModal() {
                     this.showModal = false;
@@ -123,71 +68,14 @@
 
                     return labels[severity] || 'N/A';
                 },
-                summarizeSymptoms(symptoms) {
-                    if (!symptoms) {
-                        return '{{ __('N/A') }}';
-                    }
-
-                    if (Array.isArray(symptoms)) {
-                        const labels = symptoms
-                            .map((item) => typeof item === 'object' ? (item.name ?? item['name'] ?? '') : item)
-                            .filter(Boolean);
-
-                        return labels.length ? labels.join(', ') : '{{ __('N/A') }}';
-                    }
-
-                    return symptoms;
-                },
-                highestSeverity(symptoms) {
-                    if (!Array.isArray(symptoms)) {
-                        return null;
-                    }
-
-                    const severityValues = symptoms
-                        .map((item) => typeof item === 'object' ? Number(item.severity ?? item['severity'] ?? NaN) : NaN)
-                        .filter((value) => Number.isFinite(value));
-
-                    if (!severityValues.length) {
-                        return null;
-                    }
-
-                    return Math.max(...severityValues);
-                },
-                severityBadgeClass(symptoms) {
-                    const severity = this.highestSeverity(symptoms);
-
-                    if (severity === 1) {
-                        return 'bg-green-100 text-green-800';
-                    }
-
-                    if (severity === 2) {
-                        return 'bg-yellow-100 text-yellow-800';
-                    }
-
-                    if (severity === 3) {
-                        return 'bg-orange-100 text-orange-800';
-                    }
-
-                    if (severity === 4) {
-                        return 'bg-red-100 text-red-800';
-                    }
-
-                    return 'bg-gray-100 text-gray-700';
-                },
-                severityText(symptoms) {
-                    const severity = this.highestSeverity(symptoms);
-                    return severity !== null ? this.formatSeverityLabel(severity) : '{{ __('N/A') }}';
-                },
                 requestStatusBadgeClass(status) {
                     const classes = {
                         pending: 'text-orange-700 bg-orange-100',
-                        reviewed: 'text-blue-700 bg-blue-100',
                         assigned: 'text-yellow-700 bg-yellow-100',
                         scheduled: 'text-indigo-700 bg-indigo-100',
-                        active: 'text-blue-700 bg-blue-100',
+                        active: 'text-green-700 bg-green-100',
                         completed: 'text-green-900 bg-green-100',
                         cancelled: 'text-red-700 bg-red-100',
-                        rejected: 'text-red-700 bg-red-100',
                     };
 
                     return classes[status] || 'text-gray-700 bg-gray-100';
@@ -232,13 +120,67 @@
                             return `<li class="flex items-center flex-wrap gap-2">${name}${severityBadge}${startedAtText}</li>`;
                         }).join('');
                     }
+
                     return `<li>${symptoms}</li>`;
+                },
+                rejectSelectedRequest() {
+                    Swal.fire({
+                        title: 'Reject Consultation Request?',
+                        text: 'Please provide a reason for rejecting this consultation:',
+                        icon: 'warning',
+                        input: 'textarea',
+                        inputPlaceholder: 'Type the rejection reason here...',
+                        inputAttributes: {
+                            'aria-label': 'Type your rejection reason here'
+                        },
+                        showCancelButton: true,
+                        confirmButtonColor: '#d33',
+                        cancelButtonColor: '#6b7280',
+                        confirmButtonText: 'Yes, reject it!',
+                        cancelButtonText: 'Cancel',
+                        inputValidator: (value) => {
+                            if (!value) {
+                                return 'You must provide a reason for rejection!';
+                            }
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            window.rejectionConsultation(this.selectedRequest?.request_id, result.value);
+                        }
+                    });
+                },
+                approveSelectedRequest() {
+                    Swal.fire({
+                        title: 'Approve Consultation Request?',
+                        text: 'Select a priority level before approving this consultation.',
+                        icon: 'warning',
+                        input: 'select',
+                        inputOptions: {
+                            High: 'High',
+                            Normal: 'Normal'
+                        },
+                        inputValue: 'Normal',
+                        inputPlaceholder: 'Choose priority level',
+                        showCancelButton: true,
+                        confirmButtonColor: '#10b981',
+                        cancelButtonColor: '#6b7280',
+                        confirmButtonText: 'Approve',
+                        inputValidator: (value) => {
+                            if (!value) {
+                                return 'You must select a priority level.';
+                            }
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            window.approveConsultation(this.selectedRequest?.request_id, result.value);
+                        }
+                    });
                 }
             };
         }
     </script>
 
-    <div class="py-12" x-data="consultationInbox(window.nurseInboxData, '{{ route('nurse.consultation_inbox.refresh', ['nurse' => $nurse]) }}')" x-init="init()" @nurse-inbox-refresh-requested.window="poll()" @keydown.escape.window="closeModal()">
+    <div class="py-12" x-data="consultationInbox(window.inboxRequests)" @keydown.escape.window="closeModal()">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
@@ -249,7 +191,7 @@
                             :class="activeTab === 'pending' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
                             class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
-                            {{ __('Pending') }} (<span x-text="pendingCount"></span>)
+                            {{ __('Pending') }} ({{ $pendingRequests->count() }})
                         </button>
                         <button
                             type="button"
@@ -257,62 +199,15 @@
                             :class="activeTab === 'assigned' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
                             class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
-                            {{ __('Assigned') }} (<span x-text="assignedCount"></span>)
+                            {{ __('Assigned') }} ({{ $assignedToCurrentNurse->count() + $assignedToOtherNurses->count() }})
                         </button>
                     </div>
 
                     <div x-show="activeTab === 'pending'" x-cloak>
-                        <div class="text-gray-500" x-show="pendingCount === 0">{{ __('No pending consultation requests found.') }}</div>
-                        <div class="overflow-x-auto" x-show="pendingCount > 0">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Severity') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    <template x-for="request in pendingRequests" :key="`pending-${request.request_id}`">
-                                        <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                <span class="inline-flex items-center gap-2">
-                                                    <span
-                                                        class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
-                                                        :class="request.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
-                                                        :title="request.patient_is_online ? 'Online' : 'Offline'"
-                                                    ></span>
-                                                    <span x-text="request.patient_name"></span>
-                                                </span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="summarizeSymptoms(request.symptoms_desc)"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold" :class="severityBadgeClass(request.symptoms_desc)" x-text="severityText(request.symptoms_desc)"></span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="request.submitted_at || '{{ __('Unknown') }}'"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs" :class="requestStatusBadgeClass(request.request_status)" x-text="request.request_status ? request.request_status.charAt(0).toUpperCase() + request.request_status.slice(1) : '{{ __('N/A') }}'"></span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                <button type="button" @click="openModal(request.request_id)" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
-                                                    {{ __('Review') }}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    </template>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div x-show="activeTab === 'assigned'" x-cloak class="space-y-6">
-                        <div>
-                            <h3 class="text-sm font-semibold uppercase tracking-wide text-indigo-700">{{ __('Assigned To Me') }}</h3>
-                            <p class="mt-2 text-sm text-gray-500" x-show="assignedToCurrentNurse.length === 0">{{ __('No consultations are currently assigned to you.') }}</p>
-                            <div class="mt-3 overflow-x-auto" x-show="assignedToCurrentNurse.length > 0">
+                        @if($pendingRequests->isEmpty())
+                            <div class="text-gray-500">{{ __('No pending consultation requests found.') }}</div>
+                        @else
+                            <div class="overflow-x-auto">
                                 <table class="min-w-full divide-y divide-gray-200">
                                     <thead class="bg-gray-50">
                                         <tr>
@@ -321,88 +216,264 @@
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Severity') }}</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Priority') }}</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
                                         </tr>
                                     </thead>
                                     <tbody class="bg-white divide-y divide-gray-200">
-                                        <template x-for="request in assignedToCurrentNurse" :key="`mine-${request.request_id}`">
+                                        @foreach($pendingRequests as $request)
                                             <tr>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    <span class="inline-flex items-center gap-2">
-                                                        <span
-                                                            class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
-                                                            :class="request.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
-                                                            :title="request.patient_is_online ? 'Online' : 'Offline'"
-                                                        ></span>
-                                                        <span x-text="request.patient_name"></span>
+                                                    @php
+                                                        $symptomsDisplay = __('N/A');
+                                                        $symptomsData = $request->symptoms_desc;
+
+                                                        if (!empty($symptomsData)) {
+                                                            if (is_array($symptomsData)) {
+                                                                $symptomsDisplay = collect($symptomsData)
+                                                                    ->map(function ($item) {
+                                                                        return is_array($item) ? ($item['name'] ?? null) : $item;
+                                                                    })
+                                                                    ->filter()
+                                                                    ->implode(', ');
+                                                            } else {
+                                                                $symptomsDisplay = $symptomsData;
+                                                            }
+                                                        }
+                                                    @endphp
+                                                    {{ $symptomsDisplay }}
+                                                </td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    @php
+                                                        $highestSeverity = null;
+                                                        $severityClass = 'bg-gray-100 text-gray-700';
+                                                        $severityLabel = __('N/A');
+                                                        $symptomsData = $request->symptoms_desc;
+
+                                                        if (!empty($symptomsData) && is_array($symptomsData)) {
+                                                            $severityValues = collect($symptomsData)
+                                                                ->map(function ($item) {
+                                                                    return is_array($item) ? ($item['severity'] ?? null) : null;
+                                                                })
+                                                                ->filter(fn($value) => is_numeric($value))
+                                                                ->map(fn($value) => (int) $value)
+                                                                ->all();
+
+                                                            if (!empty($severityValues)) {
+                                                                $highestSeverity = max($severityValues);
+                                                            }
+                                                        }
+
+                                                        if ($highestSeverity === 1) {
+                                                            $severityClass = 'bg-green-100 text-green-800';
+                                                            $severityLabel = __('1 - Very Mild');
+                                                        } elseif ($highestSeverity === 2) {
+                                                            $severityClass = 'bg-yellow-100 text-yellow-800';
+                                                            $severityLabel = __('2 - Mild');
+                                                        } elseif ($highestSeverity === 3) {
+                                                            $severityClass = 'bg-orange-100 text-orange-800';
+                                                            $severityLabel = __('3 - Moderate');
+                                                        } elseif ($highestSeverity === 4) {
+                                                            $severityClass = 'bg-red-100 text-red-800';
+                                                            $severityLabel = __('4 - Severe');
+                                                        }
+                                                    @endphp
+                                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold {{ $severityClass }}">
+                                                        {{ $highestSeverity !== null ? $severityLabel : __('N/A') }}
                                                     </span>
                                                 </td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="summarizeSymptoms(request.symptoms_desc)"></td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold" :class="severityBadgeClass(request.symptoms_desc)" x-text="severityText(request.symptoms_desc)"></span>
-                                                </td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="request.submitted_at || '{{ __('Unknown') }}'"></td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs" :class="requestStatusBadgeClass(request.request_status)" x-text="request.request_status ? request.request_status.charAt(0).toUpperCase() + request.request_status.slice(1) : '{{ __('N/A') }}'"></span>
-                                                </td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs" :class="priorityBadgeClass(request.priority_level)" x-text="request.priority_level ? request.priority_level.charAt(0).toUpperCase() + request.priority_level.slice(1) : '{{ __('N/A') }}'"></span>
+                                                    @php
+                                                        $statusClasses = [
+                                                            'pending' => 'text-orange-700 bg-orange-100',
+                                                            'assigned' => 'text-yellow-700 bg-yellow-100',
+                                                            'scheduled' => 'text-indigo-700 bg-indigo-100',
+                                                            'active' => 'text-green-700 bg-green-100',
+                                                            'completed' => 'text-green-900 bg-green-100',
+                                                            'cancelled' => 'text-red-700 bg-red-100',
+                                                        ];
+                                                        $badgeClass = $statusClasses[$request->request_status] ?? 'text-gray-700 bg-gray-100';
+                                                    @endphp
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs {{ $badgeClass }}">
+                                                        {{ ucfirst($request->request_status) }}
+                                                    </span>
                                                 </td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <button type="button" @click="openModal(request.request_id)" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
+                                                    <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
                                                         {{ __('Review') }}
                                                     </button>
                                                 </td>
                                             </tr>
-                                        </template>
+                                        @endforeach
                                     </tbody>
                                 </table>
                             </div>
+                        @endif
+                    </div>
+
+                    <div x-show="activeTab === 'assigned'" x-cloak class="space-y-6">
+                        <div>
+                            <h3 class="text-sm font-semibold uppercase tracking-wide text-indigo-700">{{ __('Assigned To Me') }}</h3>
+                            @if($assignedToCurrentNurse->isEmpty())
+                                <p class="mt-2 text-sm text-gray-500">{{ __('No consultations are currently assigned to you.') }}</p>
+                            @else
+                                <div class="mt-3 overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-gray-200">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Severity') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Priority') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="bg-white divide-y divide-gray-200">
+                                            @foreach($assignedToCurrentNurse as $request)
+                                                <tr>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        @php
+                                                            $symptomsDisplay = __('N/A');
+                                                            $symptomsData = $request->symptoms_desc;
+
+                                                            if (!empty($symptomsData)) {
+                                                                if (is_array($symptomsData)) {
+                                                                    $symptomsDisplay = collect($symptomsData)
+                                                                        ->map(function ($item) {
+                                                                            return is_array($item) ? ($item['name'] ?? null) : $item;
+                                                                        })
+                                                                        ->filter()
+                                                                        ->implode(', ');
+                                                                } else {
+                                                                    $symptomsDisplay = $symptomsData;
+                                                                }
+                                                            }
+                                                        @endphp
+                                                        {{ $symptomsDisplay }}
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        @php
+                                                            $highestSeverity = null;
+                                                            $severityClass = 'bg-gray-100 text-gray-700';
+                                                            $severityLabel = __('N/A');
+                                                            $symptomsData = $request->symptoms_desc;
+
+                                                            if (!empty($symptomsData) && is_array($symptomsData)) {
+                                                                $severityValues = collect($symptomsData)
+                                                                    ->map(function ($item) {
+                                                                        return is_array($item) ? ($item['severity'] ?? null) : null;
+                                                                    })
+                                                                    ->filter(fn($value) => is_numeric($value))
+                                                                    ->map(fn($value) => (int) $value)
+                                                                    ->all();
+
+                                                                if (!empty($severityValues)) {
+                                                                    $highestSeverity = max($severityValues);
+                                                                }
+                                                            }
+
+                                                            if ($highestSeverity === 1) {
+                                                                $severityClass = 'bg-green-100 text-green-800';
+                                                                $severityLabel = __('1 - Very Mild');
+                                                            } elseif ($highestSeverity === 2) {
+                                                                $severityClass = 'bg-yellow-100 text-yellow-800';
+                                                                $severityLabel = __('2 - Mild');
+                                                            } elseif ($highestSeverity === 3) {
+                                                                $severityClass = 'bg-orange-100 text-orange-800';
+                                                                $severityLabel = __('3 - Moderate');
+                                                            } elseif ($highestSeverity === 4) {
+                                                                $severityClass = 'bg-red-100 text-red-800';
+                                                                $severityLabel = __('4 - Severe');
+                                                            }
+                                                        @endphp
+                                                        <span class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold {{ $severityClass }}">
+                                                            {{ $highestSeverity !== null ? $severityLabel : __('N/A') }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                        @php
+                                                            $statusClasses = [
+                                                                'pending' => 'text-orange-700 bg-orange-100',
+                                                                'assigned' => 'text-yellow-700 bg-yellow-100',
+                                                                'scheduled' => 'text-indigo-700 bg-indigo-100',
+                                                                'active' => 'text-green-700 bg-green-100',
+                                                                'completed' => 'text-green-900 bg-green-100',
+                                                                'cancelled' => 'text-red-700 bg-red-100',
+                                                            ];
+                                                            $badgeClass = $statusClasses[$request->request_status] ?? 'text-gray-700 bg-gray-100';
+                                                        @endphp
+                                                        <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs {{ $badgeClass }}">
+                                                            {{ ucfirst($request->request_status) }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        @php
+                                                            $priorityClass = [
+                                                                'High' => 'text-red-700 bg-red-100',
+                                                                'Normal' => 'text-yellow-700 bg-yellow-100',
+                                                            ];
+                                                            $badgeClass = $priorityClass[$request->priority_level] ?? 'text-gray-700 bg-gray-100';
+                                                        @endphp
+                                                        <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs {{ $badgeClass }}">
+                                                            {{ ucfirst($request->priority_level) }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                        <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
+                                                            {{ __('Review') }}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endif
                         </div>
 
                         <div>
                             <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-700">{{ __('Assigned To Other Nurses') }}</h3>
-                            <p class="mt-2 text-sm text-gray-500" x-show="assignedToOtherNurses.length === 0">{{ __('No consultations are assigned to other nurses right now.') }}</p>
-                            <div class="mt-3 overflow-x-auto" x-show="assignedToOtherNurses.length > 0">
-                                <table class="min-w-full divide-y divide-gray-200">
-                                    <thead class="bg-gray-50">
-                                        <tr>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Assigned Nurse') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="bg-white divide-y divide-gray-200">
-                                        <template x-for="request in assignedToOtherNurses" :key="`other-${request.request_id}`">
+                            @if($assignedToOtherNurses->isEmpty())
+                                <p class="mt-2 text-sm text-gray-500">{{ __('No consultations are assigned to other nurses right now.') }}</p>
+                            @else
+                                <div class="mt-3 overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-gray-200">
+                                        <thead class="bg-gray-50">
                                             <tr>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    <span class="inline-flex items-center gap-2">
-                                                        <span
-                                                            class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
-                                                            :class="request.patient_is_online ? 'bg-emerald-500' : 'bg-slate-300'"
-                                                            :title="request.patient_is_online ? 'Online' : 'Offline'"
-                                                        ></span>
-                                                        <span x-text="request.patient_name"></span>
-                                                    </span>
-                                                </td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="request.assigned_nurse_name || '{{ __('Unassigned') }}'"></td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="request.submitted_at || '{{ __('Unknown') }}'"></td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs" :class="requestStatusBadgeClass(request.request_status)" x-text="request.request_status ? request.request_status.charAt(0).toUpperCase() + request.request_status.slice(1) : '{{ __('N/A') }}'"></span>
-                                                </td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <button type="button" @click="openModal(request.request_id)" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
-                                                        {{ __('Review') }}
-                                                    </button>
-                                                </td>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Assigned Nurse') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
                                             </tr>
-                                        </template>
-                                    </tbody>
-                                </table>
-                            </div>
+                                        </thead>
+                                        <tbody class="bg-white divide-y divide-gray-200">
+                                            @foreach($assignedToOtherNurses as $request)
+                                                <tr>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ trim(optional($request->nurse)->first_name . ' ' . optional($request->nurse)->last_name) ?: __('Unassigned') }}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                        <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs text-blue-700 bg-blue-100">
+                                                            {{ ucfirst($request->request_status) }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                        <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
+                                                            {{ __('Review') }}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -444,14 +515,14 @@
                             <p class="mt-1 inline-flex items-center rounded-full px-2 py-1 text-sm font-semibold" :class="priorityBadgeClass(selectedRequest?.priority_level)" x-text="selectedRequest?.priority_level ? selectedRequest.priority_level.charAt(0).toUpperCase() + selectedRequest.priority_level.slice(1) : '{{ __('N/A') }}'"></p>
                         </div>
                     </div>
-                    
+
                     <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
-                    <div>
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Assigned Physician') }}</p>
-                        <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedRequest?.assigned_physician_name || '{{ __('Unassigned') }}'"></p>
+                        <div>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Assigned Physician') }}</p>
+                            <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedRequest?.assigned_physician_name || '{{ __('Unassigned') }}'"></p>
+                        </div>
                     </div>
-                    </div>
-                    
+
                     <div class="rounded-xl border border-gray-200 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Concern Category') }}</p>
                         <p class="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700" x-text="selectedRequest?.concern_category ?? '{{ __('N/A') }}'"></p>
@@ -476,7 +547,7 @@
                             <ul class="mt-2 space-y-2 text-sm text-gray-900">
                                 <template x-for="file in selectedRequest.file_attachments" :key="file">
                                     <li class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                                        <a :href="file" target="_blank" rel="noopener noreferrer" class="font-medium text-indigo-600 hover:underline" x-text="file.split('/').pop()"></a>
+                                        <a :href="file" target="_blank" class="font-medium text-indigo-600 hover:underline" x-text="file.split('/').pop()"></a>
                                     </li>
                                 </template>
                             </ul>
@@ -490,63 +561,12 @@
                         {{ __('Close') }}
                     </button>
                     <template x-if="selectedRequest?.request_status === 'pending'">
-                        <button type="button"
-                            @click="Swal.fire({
-                                title: 'Reject Consultation Request?',
-                                text: 'Please provide a reason for rejecting this consultation:',
-                                icon: 'warning',
-                                input: 'textarea',
-                                inputPlaceholder: 'Type the rejection reason here...',
-                                inputAttributes: {
-                                    'aria-label': 'Type your rejection reason here'
-                                },
-                                showCancelButton: true,
-                                confirmButtonColor: '#d33',
-                                cancelButtonColor: '#6b7280',
-                                confirmButtonText: 'Yes, reject it!',
-                                cancelButtonText: 'Cancel',
-                                inputValidator: (value) => {
-                                    if (!value) {
-                                        return 'You must provide a reason for rejection!';
-                                    }
-                                }
-                            }).then((result) => {
-                                if (result.isConfirmed) {
-                                    window.rejectionConsultation(selectedRequest?.request_id, result.value);
-                                }
-                            })"
-                            class="inline-flex justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700">
+                        <button type="button" @click="rejectSelectedRequest()" class="inline-flex justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700">
                             {{ __('Reject') }}
                         </button>
                     </template>
                     <template x-if="selectedRequest?.request_status === 'pending'">
-                        <button type="button"
-                            @click="Swal.fire({
-                                title: `{{ __('Approve Consultation Request?') }}`,
-                                text: `{{ __('Select a priority level before approving this consultation.') }}`,
-                                icon: 'warning',
-                                input: 'select',
-                                inputOptions: {
-                                    High: '{{ __('High') }}',
-                                    Normal: '{{ __('Normal') }}'
-                                },
-                                inputValue: 'Normal',
-                                inputPlaceholder: '{{ __('Choose priority level') }}',
-                                showCancelButton: true,
-                                confirmButtonColor: '#10b981',
-                                cancelButtonColor: '#6b7280',
-                                confirmButtonText: `{{ __('Approve') }}`,
-                                inputValidator: (value) => {
-                                    if (!value) {
-                                        return '{{ __('You must select a priority level.') }}';
-                                    }
-                                }
-                            }).then((result) => {
-                                if (result.isConfirmed) {
-                                    window.approveConsultation(selectedRequest?.request_id, result.value);
-                                }
-                            })"
-                            class="inline-flex justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
+                        <button type="button" @click="approveSelectedRequest()" class="inline-flex justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
                             {{ __('Approve') }}
                         </button>
                     </template>
@@ -588,15 +608,13 @@
                             icon: 'success',
                             confirmButtonText: 'OK'
                         }).then(() => {
-                            window.dispatchEvent(new CustomEvent('nurse-inbox-refresh-requested'));
+                            window.location.reload();
                         });
                     } else {
                         Swal.fire('Error', data.message || 'Something went wrong.', 'error');
                     }
                 },
-                error: function(xhr, status, error) {
-                    console.error('Error:', error);
-
+                error: function(xhr) {
                     let errorMessage = 'Could not connect to the server. Please try again.';
                     if (xhr.responseJSON && xhr.responseJSON.message) {
                         errorMessage = xhr.responseJSON.message;
@@ -646,15 +664,13 @@
                             icon: 'success',
                             confirmButtonText: 'OK'
                         }).then(() => {
-                            window.dispatchEvent(new CustomEvent('nurse-inbox-refresh-requested'));
+                            window.location.reload();
                         });
                     } else {
                         Swal.fire('Error', data.message || 'Something went wrong.', 'error');
                     }
                 },
-                error: function(xhr, status, error) {
-                    console.error('Error:', error);
-
+                error: function(xhr) {
                     let errorMessage = 'Could not connect to the server. Please try again.';
                     if (xhr.responseJSON && xhr.responseJSON.message) {
                         errorMessage = xhr.responseJSON.message;
