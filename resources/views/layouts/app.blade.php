@@ -26,15 +26,22 @@
     </head>
     <body class="font-sans antialiased bg-[#f4f8f3] text-slate-800">
         <div class="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(217,182,72,0.12),transparent_30%),linear-gradient(180deg,_#eff8f1_0%,_#f5f7f3_100%)]">
-            <div class="flex min-h-screen flex-col lg:flex-row">
+            <div x-data="{ sidebarOpen: true }" class="flex min-h-screen flex-col lg:flex-row">
                 @include('layouts.navigation')
 
-                <div class="min-w-0 flex-1">
+                <div class="min-w-0 flex-1 transition-all duration-300">
                     <!-- Page Heading -->
                     @isset($header)
                         <header class="border-b border-brand-border bg-gradient-to-r from-brand-green to-brand-green-deep text-white shadow-sm">
-                            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-                                {{ $header }}
+                            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+                                <div class="flex-1 min-w-0">
+                                    {{ $header }}
+                                </div>
+                                @auth
+                                    <div class="flex-shrink-0">
+                                        @include('layouts.notificationUI')
+                                    </div>
+                                @endauth
                             </div>
                         </header>
                     @endisset
