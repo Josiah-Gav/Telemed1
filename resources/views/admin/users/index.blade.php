@@ -11,7 +11,7 @@
                 <div class="p-6 text-gray-900">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-semibold">Users</h3>
-                        <a href="{{ route('admin.users.create') }}" class="rounded-md bg-clsu-green px-4 py-2 text-sm font-medium text-white">Create User</a>
+                        <a href="{{ route('admin.users.create') }}" class="rounded-md bg-brand-green px-4 py-2 text-sm font-medium text-white hover:bg-brand-green-deep">Create User</a>
                     </div>
 
                     <div class="overflow-x-auto">
@@ -33,7 +33,7 @@
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ ucfirst($user->role) }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ ucfirst($user->account_status) }}</td>
                                         <td class="px-4 py-3 text-sm">
-                                            <a href="{{ route('admin.users.edit', $user) }}" class="text-blue-600 hover:underline">Edit</a>
+                                            <a href="{{ route('admin.users.edit', $user) }}" class="text-brand-green hover:underline">Edit</a>
                                         </td>
                                     </tr>
                                 @endforeach

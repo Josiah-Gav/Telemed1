@@ -24,23 +24,27 @@
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="font-sans antialiased">
-        <div class="min-h-screen bg-gray-100">
-            @include('layouts.navigation')
+    <body class="font-sans antialiased bg-[#f4f8f3] text-slate-800">
+        <div class="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(217,182,72,0.12),transparent_30%),linear-gradient(180deg,_#eff8f1_0%,_#f5f7f3_100%)]">
+            <div class="flex min-h-screen flex-col lg:flex-row">
+                @include('layouts.navigation')
 
-            <!-- Page Heading -->
-            @isset($header)
-                <header class="bg-white shadow">
-                    <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-                        {{ $header }}
-                    </div>
-                </header>
-            @endisset
+                <div class="min-w-0 flex-1">
+                    <!-- Page Heading -->
+                    @isset($header)
+                        <header class="border-b border-brand-border bg-gradient-to-r from-brand-green to-brand-green-deep text-white shadow-sm">
+                            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                                {{ $header }}
+                            </div>
+                        </header>
+                    @endisset
 
-            <!-- Page Content -->
-            <main class="pb-24 sm:pb-0">
-                {{ $slot }}
-            </main>
+                    <!-- Page Content -->
+                    <main class="pb-24 sm:pb-0">
+                        {{ $slot }}
+                    </main>
+                </div>
+            </div>
         </div>
 
         @auth

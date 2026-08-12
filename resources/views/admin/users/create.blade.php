@@ -62,7 +62,7 @@
                         </div>
 
                         <div class="flex gap-3">
-                            <button type="submit" class="rounded-md bg-clsu-green px-4 py-2 text-sm font-medium text-white">Create User</button>
+                            <button type="submit" class="rounded-md bg-brand-green px-4 py-2 text-sm font-medium text-white hover:bg-brand-green-deep">Create User</button>
                             <a href="{{ route('admin.users.index') }}" class="rounded-md border px-4 py-2 text-sm font-medium text-gray-700">Cancel</a>
                         </div>
                     </form>

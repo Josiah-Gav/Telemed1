@@ -19,9 +19,9 @@
             } elseif (in_array($status, ['pending', 'assigned'], true)) {
                 $statusClasses .= 'bg-yellow-100 text-yellow-700';
             } elseif ($status === 'scheduled') {
-                $statusClasses .= 'bg-indigo-100 text-indigo-700';
+                $statusClasses .= 'bg-brand-gold-soft text-brand-green-deep';
             } elseif ($status === 'active') {
-                $statusClasses .= 'bg-blue-100 text-blue-700';
+                $statusClasses .= 'bg-brand-green-soft text-brand-green-deep';
             } else {
                 $statusClasses .= 'bg-slate-100 text-slate-700';
             }
@@ -50,7 +50,7 @@
                     'clinical_badge_class' => $activeConsultation->consultationSession->hasClinicalDocumentation() ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
                     'clinical_label' => $activeConsultation->consultationSession->hasClinicalDocumentation() ? __('Assessment ready') : __('Assessment pending'),
                     'has_prescription' => $activeConsultation->consultationSession->hasPrescription(),
-                    'prescription_badge_class' => $activeConsultation->consultationSession->hasPrescription() ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600',
+                    'prescription_badge_class' => $activeConsultation->consultationSession->hasPrescription() ? 'bg-brand-green-soft text-brand-green-deep' : 'bg-slate-100 text-slate-600',
                     'prescription_label' => $activeConsultation->consultationSession->hasPrescription() ? __('Prescription uploaded') : __('No prescription'),
                     'unread_count' => 0,
                 ] : null,
@@ -151,9 +151,47 @@
 
     <div class="py-12" x-data="patientDashboard(window.patientConsultation, window.physicianFollowUp, '{{ route('dashboard.active_consultation') }}', '{{ route('consultations.messaging.unread_counts') }}')" x-init="init()">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6 text-gray-900">
-                    {{ __("Hello $patientInfo->first_name!") }}
+            <div class="overflow-hidden rounded-3xl border border-brand-border bg-gradient-to-r from-brand-green-soft via-white to-brand-gold-soft shadow-sm">
+                <div class="p-6 text-brand-green-deep sm:p-8">
+                    <p class="text-xs font-bold uppercase tracking-[0.22em] text-brand-green">Welcome</p>
+                    <h2 class="mt-2 text-2xl font-bold text-slate-900">
+                        {{ __("Hello $patientInfo->first_name!") }}
+                    </h2>
+                </div>
+            </div>
+
+            <div class="mt-6" x-data="dashboardNotifications()" x-init="init()">
+                <div class="overflow-hidden rounded-3xl border border-brand-border bg-white shadow-sm">
+                    <div class="flex flex-col gap-4 border-b border-brand-border px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-[0.22em] text-brand-green">Notifications</p>
+                            <h3 class="mt-2 text-xl font-bold text-slate-900">Recent updates</h3>
+                        </div>
+                        <button type="button" @click="markAllRead()" class="inline-flex items-center justify-center rounded-full border border-brand-border bg-brand-green-soft px-3 py-2 text-sm font-semibold text-brand-green-deep hover:bg-brand-green hover:text-white transition">
+                            Mark all as read
+                        </button>
+                    </div>
+
+                    <div class="grid gap-4 p-6 md:grid-cols-2">
+                        <template x-if="loading">
+                            <div class="rounded-2xl border border-dashed border-brand-border bg-slate-50 p-5 text-sm text-slate-500">Loading notifications...</div>
+                        </template>
+
+                        <template x-if="!loading && notifList.length === 0">
+                            <div class="rounded-2xl border border-dashed border-brand-border bg-slate-50 p-5 text-sm text-slate-500 md:col-span-2">No notifications yet. New alerts will appear here.</div>
+                        </template>
+
+                        <template x-for="n in notifList.slice(0, 4)" :key="n.notification_id">
+                            <button type="button" @click="markAsRead(n)" class="rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm" :class="n.read_at ? 'border-slate-200 bg-white' : 'border-brand-green/30 bg-brand-green-soft'">
+                                <div class="flex items-center justify-between gap-3">
+                                    <span class="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide" :class="n.read_at ? 'bg-slate-200 text-slate-600' : 'bg-brand-green text-white'" x-text="n.read_at ? 'Read' : 'New'"></span>
+                                    <span class="text-[11px] font-medium text-slate-500" x-text="formatTime(n.created_at)"></span>
+                                </div>
+                                <p class="mt-3 text-base font-bold text-slate-900" x-text="n.title"></p>
+                                <p class="mt-2 text-sm text-slate-600" x-text="n.message"></p>
+                            </button>
+                        </template>
+                    </div>
                 </div>
             </div>
 
@@ -235,11 +273,11 @@
                                 <div class="inline-flex items-center gap-3">
                                     <span :class="consultation?.status_badge_class" x-text="consultation?.status_label"></span>
                                     <template x-if="consultation?.show_messaging && consultation?.session">
-                                        <span class="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-1 text-indigo-700" title="Messaging available">
+                                        <span class="inline-flex items-center rounded-full bg-brand-gold-soft px-2.5 py-1 text-brand-green-deep" title="Messaging available">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="h-4 w-4" aria-hidden="true">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75h6.75m-6.75 3h4.5m6.375 7.5-3.375-2.025a3.75 3.75 0 0 0-1.928-.525H6.75A3.75 3.75 0 0 1 3 13.95V7.5A3.75 3.75 0 0 1 6.75 3.75h10.5A3.75 3.75 0 0 1 21 7.5v8.25a3.75 3.75 0 0 1-1.5 3z" />
                                             </svg>
-                                            <span x-show="(consultation?.session?.unread_count || 0) > 0" x-cloak class="ml-1 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white" :data-unread-badge="consultation?.session?.id" x-text="formatUnreadCount(consultation?.session?.unread_count || 0)"></span>
+                                            <span x-show="(consultation?.session?.unread_count || 0) > 0" x-cloak class="ml-1 rounded-full bg-brand-green px-1.5 py-0.5 text-[10px] font-bold text-white" :data-unread-badge="consultation?.session?.id" x-text="formatUnreadCount(consultation?.session?.unread_count || 0)"></span>
                                             <span class="sr-only">Messaging available</span>
                                         </span>
                                     </template>
@@ -265,9 +303,9 @@
                                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
                                     <p class="mt-2 text-sm font-semibold text-slate-900" x-text="consultation?.status_label"></p>
                                 </div>
-                                <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:col-span-2" x-show="consultation?.request_status === 'scheduled' && consultation?.session?.scheduled_slot" x-cloak>
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">Scheduled Appointment</p>
-                                    <p class="mt-2 text-sm font-semibold text-blue-900" x-text="consultation?.session?.scheduled_slot ? `${consultation.session.scheduled_slot.slot_date} ${consultation.session.scheduled_slot.start_time} - ${consultation.session.scheduled_slot.end_time}` : ''"></p>
+                                <div class="rounded-2xl border border-brand-border bg-brand-gold-soft p-4 sm:col-span-2" x-show="consultation?.request_status === 'scheduled' && consultation?.session?.scheduled_slot" x-cloak>
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-brand-green-deep">Scheduled Appointment</p>
+                                    <p class="mt-2 text-sm font-semibold text-brand-green-deep" x-text="consultation?.session?.scheduled_slot ? `${consultation.session.scheduled_slot.slot_date} ${consultation.session.scheduled_slot.start_time} - ${consultation.session.scheduled_slot.end_time}` : ''"></p>
                                 </div>
                             </div>
                         </div>

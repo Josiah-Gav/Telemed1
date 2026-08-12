@@ -188,36 +188,36 @@
                 <div class="mb-6 rounded-3xl border border-gray-200 bg-slate-50 p-4 shadow-sm">
                     <div class="grid gap-3 sm:grid-cols-5">
                         <!-- Disable header step jumps if we are already submitted on step 5 -->
-                        <button type="button" @click="if(currentStep < 5) currentStep = 1" :class="currentStep === 1 ? 'border-blue-500 bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition">
-                            <span :class="currentStep === 1 ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">1</span>
+                        <button type="button" @click="if(currentStep < 5) currentStep = 1" :class="currentStep === 1 ? 'border-brand-green bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition">
+                            <span :class="currentStep === 1 ? 'bg-brand-green text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">1</span>
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Patient Information</p>
                                 <p class="mt-1 text-sm font-semibold" :class="currentStep === 1 ? 'text-slate-900' : 'text-slate-500'">Provide your details</p>
                             </div>
                         </button>
-                        <button type="button" @click="if(currentStep < 5) currentStep = 2" :class="currentStep === 2 ? 'border-blue-500 bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition">
-                            <span :class="currentStep === 2 ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">2</span>
+                        <button type="button" @click="if(currentStep < 5) currentStep = 2" :class="currentStep === 2 ? 'border-brand-green bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition">
+                            <span :class="currentStep === 2 ? 'bg-brand-green text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">2</span>
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Symptoms</p>
                                 <p class="mt-1 text-sm font-semibold" :class="currentStep === 2 ? 'text-slate-900' : 'text-slate-500'">Describe your condition</p>
                             </div>
                         </button>
-                        <button type="button" @click="if(currentStep < 5) currentStep = 3" :class="currentStep === 3 ? 'border-blue-500 bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition">
-                            <span :class="currentStep === 3 ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">3</span>
+                        <button type="button" @click="if(currentStep < 5) currentStep = 3" :class="currentStep === 3 ? 'border-brand-green bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition">
+                            <span :class="currentStep === 3 ? 'bg-brand-green text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">3</span>
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Additional Details</p>
                                 <p class="mt-1 text-sm font-semibold" :class="currentStep === 3 ? 'text-slate-900' : 'text-slate-500'">Add other information</p>
                             </div>
                         </button>
-                        <button type="button" @click="if(currentStep < 5) currentStep = 4" :class="currentStep === 4 ? 'border-blue-500 bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition">
-                            <span :class="currentStep === 4 ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">4</span>
+                        <button type="button" @click="if(currentStep < 5) currentStep = 4" :class="currentStep === 4 ? 'border-brand-green bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition">
+                            <span :class="currentStep === 4 ? 'bg-brand-green text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">4</span>
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Review</p>
                                 <p class="mt-1 text-sm font-semibold" :class="currentStep === 4 ? 'text-slate-900' : 'text-slate-500'">Review your request</p>
                             </div>
                         </button>
-                        <button type="button" disabled :class="currentStep === 5 ? 'border-blue-500 bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition opacity-80">
-                            <span :class="currentStep === 5 ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">5</span>
+                        <button type="button" disabled :class="currentStep === 5 ? 'border-brand-green bg-white shadow-sm' : 'border-transparent bg-slate-50'" class="flex items-start gap-3 rounded-3xl border p-4 text-left transition opacity-80">
+                            <span :class="currentStep === 5 ? 'bg-brand-green text-white' : 'bg-slate-200 text-slate-700'" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">5</span>
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Submitted</p>
                                 <p class="mt-1 text-sm font-semibold" :class="currentStep === 5 ? 'text-slate-900' : 'text-slate-500'">Request will be reviewed</p>
@@ -293,9 +293,9 @@
                                     </div>
                                 </button>
 
-                                <button type="button" @click="window.location.href = '{{ route('patient.follow_up_list') }}'" :class="['group flex items-center justify-between rounded-3xl p-6 text-left transition', selectedType === 'followup' ? 'border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50']">
+                                <button type="button" @click="window.location.href = '{{ route('patient.follow_up_list') }}'" :class="['group flex items-center justify-between rounded-3xl p-6 text-left transition', selectedType === 'followup' ? 'border-brand-border bg-brand-green-soft hover:border-brand-green hover:bg-brand-green-soft' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50']">
                                     <div>
-                                        <div :class="['flex items-center gap-3', selectedType === 'followup' ? 'text-blue-600' : 'text-gray-500']">
+                                        <div :class="['flex items-center gap-3', selectedType === 'followup' ? 'text-brand-green' : 'text-gray-500']">
                                             <div :class="['rounded-2xl p-3', selectedType === 'followup' ? 'bg-white' : 'bg-gray-100']">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -305,7 +305,7 @@
                                         </div>
                                         <p class="mt-3 text-sm text-gray-600">For follow-up checkups or continuation of previous consultation.</p>
                                     </div>
-                                    <div :class="['flex h-9 w-9 items-center justify-center rounded-full shadow-sm', selectedType === 'followup' ? 'bg-white text-blue-600' : 'bg-gray-100 text-gray-400']">
+                                        <div :class="['flex h-9 w-9 items-center justify-center rounded-full shadow-sm', selectedType === 'followup' ? 'bg-white text-brand-green' : 'bg-gray-100 text-gray-400']">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" :fill="selectedType === 'followup' ? 'currentColor' : 'none'" :stroke="selectedType === 'followup' ? 'none' : 'currentColor'">
                                             <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L9 11.586 6.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l7-7a1 1 0 000-1.414z" clip-rule="evenodd" />
                                         </svg>
@@ -313,20 +313,20 @@
                                 </button>
                             </div>
 
-                            <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                            <div class="rounded-2xl border border-brand-border bg-brand-green-soft p-4">
                                 <div class="flex items-start gap-3">
-                                    <div class="mt-1 text-blue-700">
+                                    <div class="mt-1 text-brand-green-deep">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                                             <path fill-rule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-8 4a.75.75 0 01.75.75v.75a.75.75 0 01-1.5 0v-.75A.75.75 0 0110 14zm0-3a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 11z" clip-rule="evenodd" />
                                         </svg>
                                     </div>
                                     <div>
-                                        <p class="text-sm font-semibold text-blue-900">To avoid duplicate requests, please check your active consultations first.</p>
-                                        <p class="mt-1 text-sm text-blue-700">If your concern is related to a previous consultation, you may reopen it instead.</p>
+                                        <p class="text-sm font-semibold text-brand-green-deep">To avoid duplicate requests, please check your active consultations first.</p>
+                                        <p class="mt-1 text-sm text-brand-green">If your concern is related to a previous consultation, you may reopen it instead.</p>
                                     </div>
                                 </div>
                                 <div class="mt-4 text-right">
-                                    <a href="{{ route('patient.follow_up_list') }}" class="inline-flex items-center rounded-full border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Go to Follow-up List</a>
+                                    <a href="{{ route('patient.follow_up_list') }}" class="inline-flex items-center rounded-full border border-brand-border bg-white px-4 py-2 text-sm font-semibold text-brand-green hover:bg-brand-green-soft">Go to Follow-up List</a>
                                 </div>
                             </div>
                         </div>
@@ -372,7 +372,7 @@
                                                 <span class="text-xs font-semibold uppercase tracking-wide text-slate-500" x-text="hasCustomSymptoms() ? selectedSymptoms.filter(s => s.custom).length + ' added' : 'none added'"></span>
                                             </div>
                                             <div class="mt-4 flex flex-col gap-3 sm:flex-row">
-                                                <input type="text" x-model="customSymptomInput" placeholder="e.g. dizziness" class="grow rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-blue-500 focus:outline-none" />
+                                                <input type="text" x-model="customSymptomInput" placeholder="e.g. dizziness" class="grow rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-brand-green focus:outline-none" />
                                                 <button type="button" @click="addCustomSymptom()" class="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700">Add</button>
                                             </div>
                                             <div class="mt-4 flex flex-wrap gap-2">
@@ -388,7 +388,7 @@
                                         <div class="rounded-2xl border border-gray-200 bg-slate-50 p-4">
                                             <label class="text-sm font-semibold text-slate-900">Additional Notes (Optional)</label>
                                             <p class="mt-1 text-sm text-slate-500">Provide any additional details about your symptoms.</p>
-                                            <textarea name="additional_notes" x-model="otherSymptom" rows="4" class="mt-4 w-full rounded-3xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-blue-500 focus:outline-none" placeholder="Type your message..."></textarea>
+                                            <textarea name="additional_notes" x-model="otherSymptom" rows="4" class="mt-4 w-full rounded-3xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-brand-green focus:outline-none" placeholder="Type your message..."></textarea>
                                         </div>
                                     </div>
 
@@ -413,11 +413,11 @@
                                                         <div class="mt-4 grid gap-3 sm:grid-cols-2">
                                                             <div>
                                                                 <label class="text-xs font-semibold uppercase text-slate-500">Date</label>
-                                                                <input type="date" x-model="selectedSymptoms[index].date" class="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-blue-500 focus:outline-none" />
+                                                                <input type="date" x-model="selectedSymptoms[index].date" class="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-brand-green focus:outline-none" />
                                                             </div>
                                                             <div>
                                                                 <label class="text-xs font-semibold uppercase text-slate-500">Time</label>
-                                                                <input type="time" x-model="selectedSymptoms[index].time" class="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-blue-500 focus:outline-none" />
+                                                                <input type="time" x-model="selectedSymptoms[index].time" class="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-brand-green focus:outline-none" />
                                                             </div>
                                                         </div>
                                                         <div class="mt-4">
@@ -450,7 +450,7 @@
                                 <div class="mt-6 space-y-6">
                                     <div>
                                         <label for="online_reason" class="block text-sm font-medium text-gray-700 mb-2">Reason for seeking online consultation</label>
-                                        <textarea id="online_reason" name="online_reason" x-ref="online_reason" rows="4" required class="mt-1 block w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" placeholder="Describe why you are seeking online consultation today."></textarea>
+                                        <textarea id="online_reason" name="online_reason" x-ref="online_reason" rows="4" required class="mt-1 block w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-green-100" placeholder="Describe why you are seeking online consultation today."></textarea>
                                     </div>
 
                                     <div>
@@ -531,7 +531,7 @@
                                 Your request has been securely dispatched. The infirmary medical staff will review your symptoms context to execute deterministic rules routing shortly.
                             </p>
                             <div class="pt-6">
-                                <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 shadow-sm transition">
+                                <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-brand-green px-6 py-3 text-sm font-semibold text-white hover:bg-brand-green-deep shadow-sm transition">
                                     Return to Dashboard
                                 </a>
                             </div>
@@ -552,7 +552,7 @@
                             <button type="button" 
                                     @click="goToStep(currentStep + 1)" 
                                     x-show="currentStep < 4"
-                                    class="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
+                                    class="inline-flex items-center justify-center rounded-full bg-brand-green px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-green-deep">
                                 Next
                             </button>
 

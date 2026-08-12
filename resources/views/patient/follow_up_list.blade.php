@@ -91,7 +91,7 @@
                                     </td>
                                     <td class="px-6 py-4 text-sm">
                                         <div class="flex flex-wrap gap-2">
-                                            <a href="{{ $messagingUrl }}" class="inline-flex items-center rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
+                                            <a href="{{ $messagingUrl }}" class="inline-flex items-center rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-white hover:bg-brand-green-deep">
                                                 View Details
                                             </a>
 
@@ -101,7 +101,7 @@
                                                 </span>
                                             @else
                                                 
-                                                    <button type="button" data-form-id="follow-up-form-{{ $session->id }}" onclick="requestFollowUp(this)" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                                                    <button type="button" data-form-id="follow-up-form-{{ $session->id }}" onclick="requestFollowUp(this)" class="inline-flex items-center justify-center rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-white hover:bg-brand-green-deep">
                                                         Request Follow-up
                                                     </button>
                                                     <form id="follow-up-form-{{ $session->id }}" method="POST" action="{{ route('patient.follow_up_requests.store', ['session' => $session]) }}" class="hidden">

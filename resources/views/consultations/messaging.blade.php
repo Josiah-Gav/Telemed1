@@ -34,7 +34,7 @@
                         <button
                             type="button"
                             @click="activeTab = 'messages'"
-                            :class="activeTab === 'messages' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
+                            :class="activeTab === 'messages' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
                             class="rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
                             Messages
@@ -42,7 +42,7 @@
                         <button
                             type="button"
                             @click="activeTab = 'details'"
-                            :class="activeTab === 'details' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
+                            :class="activeTab === 'details' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
                             class="rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
                             Details
@@ -50,7 +50,7 @@
                         <button
                             type="button"
                             @click="activeTab = 'assessment'"
-                            :class="activeTab === 'assessment' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
+                            :class="activeTab === 'assessment' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
                             class="rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
                             Assessment
@@ -94,8 +94,8 @@
                         <template x-for="msg in messages" :key="msg.message_id">
                             <div class="flex" :class="isMine(msg) ? 'justify-end' : 'justify-start'">
                                 <div class="max-w-[80%] rounded-2xl px-4 py-3 shadow-sm"
-                                    :class="isMine(msg) ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-800'">
-                                    <p class="text-xs mb-1" :class="isMine(msg) ? 'text-indigo-100' : 'text-slate-500'" x-text="msg.sender_name || 'Unknown user'"></p>
+                                    :class="isMine(msg) ? 'bg-brand-green text-white' : 'bg-white border border-slate-200 text-slate-800'">
+                                    <p class="text-xs mb-1" :class="isMine(msg) ? 'text-green-100' : 'text-slate-500'" x-text="msg.sender_name || 'Unknown user'"></p>
                                     <template x-if="msg.message">
                                         <p class="text-sm whitespace-pre-wrap break-words" x-text="msg.message"></p>
                                     </template>
@@ -104,7 +104,7 @@
                                         <div class="mt-3 space-y-2">
                                             <template x-for="file in msg.attachments" :key="file.attachment_id">
                                                 <a :href="file.download_url" class="block rounded-lg px-3 py-2 text-xs font-semibold"
-                                                    :class="isMine(msg) ? 'bg-indigo-500 text-indigo-50 hover:bg-indigo-400' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'">
+                                                    :class="isMine(msg) ? 'bg-brand-green-deep text-green-50 hover:bg-brand-green' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'">
                                                     <span x-text="file.file_name"></span>
                                                     <span class="ml-2 opacity-80" x-text="formatFileSize(file.file_size)"></span>
                                                 </a>
@@ -112,7 +112,7 @@
                                         </div>
                                     </template>
 
-                                    <div class="mt-2 flex items-center gap-1 text-[11px]" :class="isMine(msg) ? 'text-indigo-100 justify-end' : 'text-slate-400 justify-start'">
+                                    <div class="mt-2 flex items-center gap-1 text-[11px]" :class="isMine(msg) ? 'text-green-100 justify-end' : 'text-slate-400 justify-start'">
                                         <span x-text="formatTime(msg.created_at)"></span>
 
                                         <template x-if="isMine(msg)">
@@ -149,7 +149,7 @@
                                 @blur="handleDraftBlur"
                                 rows="3"
                                 maxlength="2000"
-                                class="w-full rounded-xl border-slate-300 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                class="w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100"
                                 placeholder="Type your message..."></textarea>
 
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -160,7 +160,7 @@
                                 <button
                                     type="submit"
                                     :disabled="isSending"
-                                    class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
+                                    class="inline-flex items-center justify-center rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white hover:bg-brand-green-deep disabled:opacity-60">
                                     <span x-show="!isSending">Send</span>
                                     <span x-show="isSending">Sending...</span>
                                 </button>
@@ -279,7 +279,7 @@
                                             type="text"
                                             x-model="clinical.diagnosis"
                                             maxlength="255"
-                                            class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                            class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100"
                                             placeholder="Enter diagnosis"
                                         />
                                     </div>
@@ -291,7 +291,7 @@
                                                 <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700" x-text="selectedPrescriptionName"></span>
                                             </template>
                                             <template x-if="clinical.prescription.download_url && !selectedPrescriptionName">
-                                                <a :href="clinical.prescription.download_url" class="font-semibold text-indigo-600 hover:text-indigo-700">Download current prescription</a>
+                                                <a :href="clinical.prescription.download_url" class="font-semibold text-brand-green hover:text-brand-green-deep">Download current prescription</a>
                                             </template>
                                             <template x-if="clinical.prescription.file_name && !selectedPrescriptionName">
                                                 <button type="button" @click="removePrescription" class="font-semibold text-rose-600 hover:text-rose-700">Remove current prescription</button>
@@ -306,7 +306,7 @@
                                         x-model="clinical.assessment"
                                         rows="4"
                                         maxlength="10000"
-                                        class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100"
                                         placeholder="Document the assessment"></textarea>
                                 </div>
 
@@ -316,7 +316,7 @@
                                         x-model="clinical.plan"
                                         rows="4"
                                         maxlength="10000"
-                                        class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100"
                                         placeholder="Document the treatment plan"></textarea>
                                 </div>
 
@@ -326,7 +326,7 @@
                                         x-model="clinical.recommendations"
                                         rows="4"
                                         maxlength="10000"
-                                        class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100"
                                         placeholder="Provide physician recommendations"></textarea>
                                 </div>
 
@@ -342,7 +342,7 @@
                                     <button
                                         type="submit"
                                         :disabled="isSavingClinical"
-                                        class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
+                                        class="inline-flex items-center justify-center rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white hover:bg-brand-green-deep disabled:opacity-60">
                                         <span x-show="!isSavingClinical">Save clinical details</span>
                                         <span x-show="isSavingClinical">Saving...</span>
                                     </button>
@@ -359,7 +359,7 @@
                                     <template x-if="clinical.prescription.download_url">
                                         <div class="mt-2 space-y-2">
                                             <p class="text-sm font-medium text-slate-800" x-text="clinical.prescription.file_name"></p>
-                                            <a :href="clinical.prescription.download_url" class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Download prescription</a>
+                                            <a :href="clinical.prescription.download_url" class="inline-flex items-center rounded-lg bg-brand-green px-3 py-2 text-sm font-semibold text-white hover:bg-brand-green-deep">Download prescription</a>
                                         </div>
                                     </template>
                                     <template x-if="!clinical.prescription.download_url">

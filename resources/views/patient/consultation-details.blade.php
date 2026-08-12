@@ -24,9 +24,9 @@
                                     } elseif ($status === 'completed') {
                                         $statusClasses .= 'bg-emerald-100 text-emerald-700';
                                     } elseif ($status === 'scheduled') {
-                                        $statusClasses .= 'bg-indigo-100 text-indigo-700';
+                                        $statusClasses .= 'bg-brand-gold-soft text-brand-green-deep';
                                     } elseif ($status === 'active') {
-                                        $statusClasses .= 'bg-blue-100 text-blue-700';
+                                        $statusClasses .= 'bg-brand-green-soft text-brand-green-deep';
                                     } else {
                                         $statusClasses .= 'bg-slate-100 text-slate-700';
                                     }
@@ -44,10 +44,10 @@
                         </div>
 
                         @if($consultation->request_status === 'scheduled' && $consultation->consultationSession && $consultation->consultationSession->slot)
-                            <div class="rounded-3xl border border-blue-200 bg-blue-50 p-6">
-                                <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">Scheduled Appointment</p>
-                                <p class="mt-3 text-lg font-bold text-blue-900">{{ $consultation->consultationSession->slot->slot_date?->format('l, F j, Y') ?? $consultation->consultationSession->slot->slot_date }}</p>
-                                <p class="mt-1 text-sm text-blue-800">{{ $consultation->consultationSession->slot->start_time }} - {{ $consultation->consultationSession->slot->end_time }}</p>
+                            <div class="rounded-3xl border border-brand-border bg-brand-gold-soft p-6">
+                                <p class="text-sm font-semibold uppercase tracking-wide text-brand-green-deep">Scheduled Appointment</p>
+                                <p class="mt-3 text-lg font-bold text-brand-green-deep">{{ $consultation->consultationSession->slot->slot_date?->format('l, F j, Y') ?? $consultation->consultationSession->slot->slot_date }}</p>
+                                <p class="mt-1 text-sm text-brand-green">{{ $consultation->consultationSession->slot->start_time }} - {{ $consultation->consultationSession->slot->end_time }}</p>
                             </div>
                         @endif
 
@@ -112,7 +112,7 @@
                             > Cancel </a>
                             @endif
                             @if ($consultation->request_status === 'active' && $consultation->consultationSession)
-                                <a href="{{ route('consultations.messaging.show', $consultation->consultationSession) }}" class="inline-flex items-center justify-center rounded-full bg-indigo-700 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-600" aria-label="Open messaging">
+                                <a href="{{ route('consultations.messaging.show', $consultation->consultationSession) }}" class="inline-flex items-center justify-center rounded-full bg-brand-green px-4 py-3 text-sm font-semibold text-white hover:bg-brand-green-deep" aria-label="Open messaging">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="h-5 w-5" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75h6.75m-6.75 3h4.5m6.375 7.5-3.375-2.025a3.75 3.75 0 0 0-1.928-.525H6.75A3.75 3.75 0 0 1 3 13.95V7.5A3.75 3.75 0 0 1 6.75 3.75h10.5A3.75 3.75 0 0 1 21 7.5v8.25a3.75 3.75 0 0 1-1.5 3z" />
                                     </svg>
@@ -124,7 +124,7 @@
                                     {{ __('View Chats & Assessment') }}
                                 </a>
                             @endif
-                            <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800">Back to Dashboard</a>
+                            <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-brand-green px-6 py-3 text-sm font-semibold text-white hover:bg-brand-green-deep">Back to Dashboard</a>
                         </div>
                     </div>
                 </div>

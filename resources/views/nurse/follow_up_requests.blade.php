@@ -162,7 +162,7 @@
                                                 reason: @js($followUp->reason),
                                                 forward_url: @js(route('nurse.follow_up_requests.forward', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id])),
                                                 reject_url: @js(route('nurse.follow_up_requests.reject', ['nurse' => $nurse->user_id, 'followUpRequest' => $followUp->id]))
-                                            })" class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                                            })" class="inline-flex items-center rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-white hover:bg-brand-green-deep">
                                                 Forward
                                             </button>
                                             <button type="button" @click="rejectRequest({

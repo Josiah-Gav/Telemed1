@@ -241,19 +241,19 @@
                     <div class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">{{ __('Date') }}</label>
-                            <input type="date" x-model="form.slot_date" class="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+                            <input type="date" x-model="form.slot_date" class="block w-full rounded-md border-gray-300 focus:border-brand-green focus:ring-green-100" />
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">{{ __('Start Time') }}</label>
-                            <input type="time" x-model="form.start_time" class="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+                            <input type="time" x-model="form.start_time" class="block w-full rounded-md border-gray-300 focus:border-brand-green focus:ring-green-100" />
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">{{ __('End Time') }}</label>
-                            <input type="time" x-model="form.end_time" class="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+                            <input type="time" x-model="form.end_time" class="block w-full rounded-md border-gray-300 focus:border-brand-green focus:ring-green-100" />
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">{{ __('Appointment Duration') }}</label>
-                            <select x-model="form.duration_minutes" class="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
+                            <select x-model="form.duration_minutes" class="block w-full rounded-md border-gray-300 focus:border-brand-green focus:ring-green-100">
                                 <option value="15">15 minutes</option>
                                 <option value="30">30 minutes</option>
                                 <option value="45">45 minutes</option>
@@ -262,11 +262,11 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">{{ __('Break Start (Optional)') }}</label>
-                            <input type="time" x-model="form.break_start_time" class="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+                            <input type="time" x-model="form.break_start_time" class="block w-full rounded-md border-gray-300 focus:border-brand-green focus:ring-green-100" />
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">{{ __('Break End (Optional)') }}</label>
-                            <input type="time" x-model="form.break_end_time" class="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+                            <input type="time" x-model="form.break_end_time" class="block w-full rounded-md border-gray-300 focus:border-brand-green focus:ring-green-100" />
                         </div>
                     </div>
 
@@ -275,7 +275,7 @@
                             type="button"
                             @click="generateSchedule()"
                             :disabled="generating"
-                            class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition disabled:opacity-60"
+                            class="inline-flex items-center px-4 py-2 bg-brand-green text-white text-xs font-semibold rounded-md hover:bg-brand-green-deep transition disabled:opacity-60"
                         >
                             <span x-show="!generating">{{ __('Generate Schedule') }}</span>
                             <span x-show="generating" x-cloak>{{ __('Generating...') }}</span>
@@ -307,7 +307,7 @@
                     <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         <template x-for="(slot, index) in generatedSlots" :key="`${slot.start_time}-${slot.end_time}-${index}`">
                             <label class="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50">
-                                <input type="checkbox" x-model="slot.selected" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                                <input type="checkbox" x-model="slot.selected" class="rounded border-gray-300 text-brand-green focus:ring-green-100" />
                                 <span class="text-sm font-medium text-slate-700" x-text="slot.label"></span>
                             </label>
                         </template>
@@ -336,7 +336,7 @@
                         <button
                             type="button"
                             @click="activeSlotsTab = 'upcoming'"
-                            :class="activeSlotsTab === 'upcoming' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                            :class="activeSlotsTab === 'upcoming' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
                             class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
                             {{ __('Upcoming Slots') }} (<span x-text="upcomingSlots.length"></span>)

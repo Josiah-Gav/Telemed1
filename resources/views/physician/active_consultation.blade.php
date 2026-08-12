@@ -123,7 +123,7 @@
                                                 @php
                                                     $consultationTypeLabel = $consultation->type === 'follow_up' ? __('Follow-up') : __('General');
                                                 @endphp
-                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $consultation->type === 'follow_up' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700' }}">
+                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $consultation->type === 'follow_up' ? 'bg-brand-gold-soft text-brand-green-deep' : 'bg-slate-100 text-slate-700' }}">
                                                     {{ $consultationTypeLabel }}
                                                 </span>
                                             </td>
@@ -170,7 +170,7 @@
                                                         <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $consultation->consultationSession->hasClinicalDocumentation() ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700' }}">
                                                             {{ $consultation->consultationSession->hasClinicalDocumentation() ? __('Assessment ready') : __('Assessment pending') }}
                                                         </span>
-                                                        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $consultation->consultationSession->hasPrescription() ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600' }}">
+                                                        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $consultation->consultationSession->hasPrescription() ? 'bg-brand-green-soft text-brand-green-deep' : 'bg-slate-100 text-slate-600' }}">
                                                             {{ $consultation->consultationSession->hasPrescription() ? __('Prescription uploaded') : __('No prescription') }}
                                                         </span>
                                                         @if($consultation->consultationSession->consultation_status === 'completed')
@@ -200,14 +200,14 @@
 
                                                         <a
                                                             href="{{ route('consultations.messaging.show', $consultation->consultationSession) }}"
-                                                            class="inline-flex items-center gap-1 rounded-md {{ $consultation->consultationSession->consultation_status === 'completed' ? 'bg-slate-700 hover:bg-slate-800' : 'bg-indigo-600 hover:bg-indigo-700' }} px-3 py-2 text-xs font-semibold text-white"
+                                                            class="inline-flex items-center gap-1 rounded-md {{ $consultation->consultationSession->consultation_status === 'completed' ? 'bg-slate-700 hover:bg-slate-800' : 'bg-brand-green hover:bg-brand-green-deep' }} px-3 py-2 text-xs font-semibold text-white"
                                                             aria-label="Open messaging"
                                                             data-session-id="{{ $consultation->consultationSession->id }}"
                                                         >
                                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="h-4 w-4" aria-hidden="true">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75h6.75m-6.75 3h4.5m6.375 7.5-3.375-2.025a3.75 3.75 0 0 0-1.928-.525H6.75A3.75 3.75 0 0 1 3 13.95V7.5A3.75 3.75 0 0 1 6.75 3.75h10.5A3.75 3.75 0 0 1 21 7.5v8.25a3.75 3.75 0 0 1-1.5 3z" />
                                                             </svg>
-                                                            <span class="hidden rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-indigo-700" data-unread-badge="{{ $consultation->consultationSession->id }}">0</span>
+                                                            <span class="hidden rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-brand-green" data-unread-badge="{{ $consultation->consultationSession->id }}">0</span>
                                                             <span>{{ $consultation->consultationSession->consultation_status === 'completed' ? __('View') : __('Chat') }}</span>
                                                             <span class="sr-only">{{ __('Open messaging') }}</span>
                                                         </a>
@@ -285,7 +285,7 @@
                             <ul class="mt-2 space-y-2 text-sm text-gray-900">
                                 <template x-for="file in selectedConsultation.file_attachments" :key="file">
                                     <li class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                                        <a :href="file" target="_blank" class="font-medium text-indigo-600 hover:underline" x-text="file.split('/').pop()"></a>
+                                        <a :href="file" target="_blank" class="font-medium text-brand-green hover:underline" x-text="file.split('/').pop()"></a>
                                     </li>
                                 </template>
                             </ul>

@@ -63,9 +63,9 @@
                                 } elseif (in_array($status, ['pending', 'assigned'], true)) {
                                     $badgeClasses .= 'bg-yellow-100 text-yellow-700';
                                 } elseif ($status === 'scheduled') {
-                                    $badgeClasses .= 'bg-indigo-100 text-indigo-700';
+                                    $badgeClasses .= 'bg-brand-gold-soft text-brand-green-deep';
                                 } elseif ($status === 'active') {
-                                    $badgeClasses .= 'bg-blue-100 text-blue-700';
+                                    $badgeClasses .= 'bg-brand-green-soft text-brand-green-deep';
                                 } else {
                                     $badgeClasses .= 'bg-slate-100 text-slate-700';
                                 }
@@ -106,7 +106,7 @@
                                         data-follow-up-url="{{ route('physician.follow_up.create', ['physician' => $physician->user_id, 'session' => $consultation->consultationSession->id]) }}"
                                         data-slots-url="{{ route('physician.follow_up.available_slots', ['physician' => $physician->user_id, 'session' => $consultation->consultationSession->id]) }}"
                                         onclick="scheduleFollowUpFromHistory(this)"
-                                        class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                                        class="inline-flex items-center gap-1 rounded-md bg-brand-green px-3 py-2 text-xs font-semibold text-white hover:bg-brand-green-deep"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="h-4 w-4" aria-hidden="true">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2" />

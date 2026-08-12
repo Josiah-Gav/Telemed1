@@ -6,14 +6,36 @@
   [x-cloak] {
     display: none !important;
   }
+
+  body {
+    @apply bg-[#f4f8f3] text-slate-800 antialiased;
+  }
 }
 
 :root {
+  --brand-green: #0f6b3d;
+  --brand-green-deep: #0a4d2d;
+  --brand-green-soft: #edf8f0;
+  --brand-gold: #d9b648;
+  --brand-gold-soft: #fff7dc;
+  --brand-white: #ffffff;
+  --brand-border: #dfe9e0;
+  --brand-muted: #f4f7f4;
   --clsu-green: #008000;
   --clsu-gold: #FFD700;
 }
 
 @layer utilities {
+  .bg-brand-green { background-color: var(--brand-green) !important; }
+  .bg-brand-green-deep { background-color: var(--brand-green-deep) !important; }
+  .bg-brand-green-soft { background-color: var(--brand-green-soft) !important; }
+  .bg-brand-gold { background-color: var(--brand-gold) !important; }
+  .bg-brand-gold-soft { background-color: var(--brand-gold-soft) !important; }
+  .text-brand-green { color: var(--brand-green) !important; }
+  .text-brand-green-deep { color: var(--brand-green-deep) !important; }
+  .text-brand-gold { color: var(--brand-gold) !important; }
+  .border-brand-border { border-color: var(--brand-border) !important; }
+  .bg-brand-panel { background-color: var(--brand-white) !important; }
   .bg-clsu-green { background-color: var(--clsu-green) !important; }
   .text-clsu-green { color: var(--clsu-green) !important; }
   .bg-clsu-gold { background-color: var(--clsu-gold) !important; }

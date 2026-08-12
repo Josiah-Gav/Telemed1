@@ -15,7 +15,7 @@
                                 <h3 class="text-lg font-semibold text-slate-900">Your Consultation History</h3>
                                 <p class="mt-1 text-sm text-slate-500">Review your past consultation requests and their status.</p>
                             </div>
-                            <a href="{{ route('consultations.create') }}" class="inline-flex items-center justify-center rounded-full bg-clsu-green px-5 py-2.5 text-sm font-semibold text-white hover:opacity-95">New Consultation</a>
+                            <a href="{{ route('consultations.create') }}" class="inline-flex items-center justify-center rounded-full bg-brand-green px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-green-deep">New Consultation</a>
                         </div>
 
                                 <form method="GET" action="{{ route('consultations.history') }}" class="rounded-2xl border border-gray-200 bg-slate-50 p-4">
@@ -23,7 +23,7 @@
                                         <div class="grid gap-4 sm:grid-cols-3">
                                             <div>
                                                 <label for="date_filter" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Date Range</label>
-                                                <select id="date_filter" name="date_filter" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                                                <select id="date_filter" name="date_filter" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-green-100">
                                                     <option value="all" {{ ($filters['date_filter'] ?? 'all') === 'all' ? 'selected' : '' }}>All</option>
                                                     <option value="today" {{ ($filters['date_filter'] ?? 'all') === 'today' ? 'selected' : '' }}>Today</option>
                                                     <option value="last_7_days" {{ ($filters['date_filter'] ?? 'all') === 'last_7_days' ? 'selected' : '' }}>Last 7 Days</option>
@@ -32,7 +32,7 @@
                                             </div>
                                             <div>
                                                 <label for="status" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</label>
-                                                <select id="status" name="status" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                                                <select id="status" name="status" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-green-100">
                                                     <option value="all" {{ ($filters['status'] ?? 'all') === 'all' ? 'selected' : '' }}>All Statuses</option>
                                                     <option value="completed" {{ ($filters['status'] ?? 'all') === 'completed' ? 'selected' : '' }}>Completed</option>
                                                     <option value="cancelled" {{ ($filters['status'] ?? 'all') === 'cancelled' ? 'selected' : '' }}>Cancelled</option>
@@ -41,14 +41,14 @@
                                             </div>
                                             <div>
                                                 <label for="consultation_type" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Consultation Type</label>
-                                                <select id="consultation_type" name="consultation_type" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                                                <select id="consultation_type" name="consultation_type" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-green-100">
                                                     <option value="all" {{ ($filters['consultation_type'] ?? 'all') === 'all' ? 'selected' : '' }}>All Types</option>
                                                     <option value="follow_up" {{ ($filters['consultation_type'] ?? 'all') === 'follow_up' ? 'selected' : '' }}>Follow-up</option>
                                                     <option value="general" {{ ($filters['consultation_type'] ?? 'all') === 'general' ? 'selected' : '' }}>General</option>
                                                 </select>
                                             </div>
                                             <div class="flex items-end gap-2">
-                                                <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900">Apply</button>
+                                                <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-brand-green px-4 py-2 text-sm font-semibold text-white hover:bg-brand-green-deep">Apply</button>
                                                 <a href="{{ route('consultations.history') }}" class="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Reset</a>
                                             </div>
                                         </div>
@@ -81,9 +81,9 @@
                                             } elseif (in_array($status, ['pending', 'assigned'], true)) {
                                                 $badgeClasses .= 'bg-yellow-100 text-yellow-700';
                                             } elseif ($status === 'scheduled') {
-                                                $badgeClasses .= 'bg-indigo-100 text-indigo-700';
+                                                $badgeClasses .= 'bg-brand-gold-soft text-brand-green-deep';
                                             } elseif ($status === 'active') {
-                                                $badgeClasses .= 'bg-blue-100 text-blue-700';
+                                                $badgeClasses .= 'bg-brand-green-soft text-brand-green-deep';
                                             } else {
                                                 $badgeClasses .= 'bg-slate-100 text-slate-700';
                                             }

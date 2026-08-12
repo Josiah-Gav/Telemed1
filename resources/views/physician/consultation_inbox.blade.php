@@ -83,7 +83,7 @@
                     const classes = {
                         reviewed: 'text-yellow-700 bg-yellow-100',
                         assigned: 'text-yellow-700 bg-yellow-100',
-                        scheduled: 'text-indigo-700 bg-indigo-100',
+                        scheduled: 'text-brand-green-deep bg-brand-gold-soft',
                         active: 'text-green-700 bg-green-100',
                     };
 
@@ -92,7 +92,7 @@
                 priorityBadgeClass(priority) {
                     return priority === 'High'
                         ? 'text-red-700 bg-red-100'
-                        : 'text-blue-700 bg-blue-100';
+                        : 'text-brand-green-deep bg-brand-green-soft';
                 },
                 formatSymptoms(symptoms) {
                     if (!symptoms) return '';
@@ -323,8 +323,8 @@
                         <button
                             type="button"
                             @click="activeTab = 'normal'"
-                            :class="activeTab === 'normal' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
-                            class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold transition"
+                            :class="activeTab === 'normal' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                            class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold transition",
                         >
                             {{ __('Normal Priority') }} ({{ $normalPriorityConsultations->count() }})
                         </button>
@@ -387,7 +387,7 @@
                                                     </span>
                                                 </td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-100">
+                                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold text-brand-green-deep bg-brand-green-soft">
                                                         {{ $consultation->priority_level ?? __('Normal') }}
                                                     </span>
                                                 </td>
@@ -524,7 +524,7 @@
 
                     <div class="rounded-xl border border-gray-200 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Concern Category') }}</p>
-                        <p class="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700" x-text="selectedConsultation?.concern_category ?? '{{ __('N/A') }}'"></p>
+                        <p class="mt-2 rounded-lg bg-brand-green-soft px-3 py-2 text-sm font-medium text-brand-green-deep" x-text="selectedConsultation?.concern_category ?? '{{ __('N/A') }}'"></p>
                     </div>
 
                     <div class="rounded-xl border border-gray-200 p-3">
@@ -546,7 +546,7 @@
                             <ul class="mt-2 space-y-2 text-sm text-gray-900">
                                 <template x-for="file in selectedConsultation.file_attachments" :key="file">
                                     <li class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                                        <a :href="file" target="_blank" rel="noopener noreferrer" class="font-medium text-indigo-600 hover:underline" x-text="decodeURIComponent(file.split('/').pop().split('?')[0])"></a>
+                                        <a :href="file" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-green hover:underline" x-text="decodeURIComponent(file.split('/').pop().split('?')[0])"></a>
                                     </li>
                                 </template>
                             </ul>
@@ -589,7 +589,7 @@
                     </template>
                     <template x-if="selectedConsultation && ['reviewed', 'assigned', 'scheduled'].includes(selectedConsultation.request_status)">
                         <button type="button" @click="promptScheduleSlot()"
-                        class="inline-flex justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700">
+                        class="inline-flex justify-center rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-green-deep">
                             {{ __('Schedule') }}
                         </button>
                     </template>

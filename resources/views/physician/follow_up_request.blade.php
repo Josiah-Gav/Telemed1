@@ -240,7 +240,7 @@
                                                     reason: @js($followUp->reason),
                                                     decide_url: @js(route('physician.follow_up_requests.decide', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id])),
                                                     available_slots_url: @js(route('physician.follow_up_requests.available_slots', ['physician' => $physician->user_id, 'followUpRequest' => $followUp->id]))
-                                                })" class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+                                                })" class="inline-flex items-center rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-white hover:bg-brand-green-deep">
                                                     Schedule
                                                 </button>
                                             @else

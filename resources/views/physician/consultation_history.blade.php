@@ -177,7 +177,7 @@
                         <div class="grid gap-4 sm:grid-cols-4">
                             <div>
                                 <label for="date_filter" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Date Range</label>
-                                <select id="date_filter" name="date_filter" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                                <select id="date_filter" name="date_filter" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-green-100">
                                     <option value="all" {{ ($filters['date_filter'] ?? 'all') === 'all' ? 'selected' : '' }}>All</option>
                                     <option value="today" {{ ($filters['date_filter'] ?? 'all') === 'today' ? 'selected' : '' }}>Today</option>
                                     <option value="last_7_days" {{ ($filters['date_filter'] ?? 'all') === 'last_7_days' ? 'selected' : '' }}>Last 7 Days</option>
@@ -186,7 +186,7 @@
                             </div>
                             <div>
                                 <label for="status" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</label>
-                                <select id="status" name="status" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                                <select id="status" name="status" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-green-100">
                                     <option value="all" {{ ($filters['status'] ?? 'all') === 'all' ? 'selected' : '' }}>All Statuses</option>
                                     <option value="completed" {{ ($filters['status'] ?? 'all') === 'completed' ? 'selected' : '' }}>Completed</option>
                                     <option value="cancelled" {{ ($filters['status'] ?? 'all') === 'cancelled' ? 'selected' : '' }}>Cancelled</option>
@@ -195,7 +195,7 @@
                             </div>
                             <div>
                                 <label for="consultation_type" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Consultation Type</label>
-                                <select id="consultation_type" name="consultation_type" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                                <select id="consultation_type" name="consultation_type" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-green-100">
                                     <option value="all" {{ ($filters['consultation_type'] ?? 'all') === 'all' ? 'selected' : '' }}>All Types</option>
                                     <option value="follow_up" {{ ($filters['consultation_type'] ?? 'all') === 'follow_up' ? 'selected' : '' }}>Follow-up</option>
                                     <option value="general" {{ ($filters['consultation_type'] ?? 'all') === 'general' ? 'selected' : '' }}>General</option>
@@ -203,11 +203,11 @@
                             </div>
                             <div>
                                 <label for="search" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Search Patient or Nurse</label>
-                                <input id="search" type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Enter patient or nurse name" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                                <input id="search" type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Enter patient or nurse name" class="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-green-100" />
                             </div>
                         </div>
                         <div class="mt-4 flex items-center gap-2">
-                            <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900">Apply</button>
+                            <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-brand-green px-4 py-2 text-sm font-semibold text-white hover:bg-brand-green-deep">Apply</button>
                             <a href="{{ route('physician.consultation_history', ['physician' => $physician->user_id]) }}" class="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Reset</a>
                         </div>
                     </form>

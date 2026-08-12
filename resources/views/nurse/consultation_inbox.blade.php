@@ -72,7 +72,7 @@
                     const classes = {
                         pending: 'text-orange-700 bg-orange-100',
                         assigned: 'text-yellow-700 bg-yellow-100',
-                        scheduled: 'text-indigo-700 bg-indigo-100',
+                        scheduled: 'text-brand-green-deep bg-brand-gold-soft',
                         active: 'text-green-700 bg-green-100',
                         completed: 'text-green-900 bg-green-100',
                         cancelled: 'text-red-700 bg-red-100',
@@ -188,7 +188,7 @@
                         <button
                             type="button"
                             @click="setTab('pending')"
-                            :class="activeTab === 'pending' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                            :class="activeTab === 'pending' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
                             class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
                             {{ __('Pending') }} ({{ $pendingRequests->count() }})
@@ -196,7 +196,7 @@
                         <button
                             type="button"
                             @click="setTab('assigned')"
-                            :class="activeTab === 'assigned' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                            :class="activeTab === 'assigned' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'"
                             class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold transition"
                         >
                             {{ __('Assigned') }} ({{ $assignedToCurrentNurse->count() + $assignedToOtherNurses->count() }})
@@ -288,7 +288,7 @@
                                                         $statusClasses = [
                                                             'pending' => 'text-orange-700 bg-orange-100',
                                                             'assigned' => 'text-yellow-700 bg-yellow-100',
-                                                            'scheduled' => 'text-indigo-700 bg-indigo-100',
+                                                            'scheduled' => 'text-brand-green-deep bg-brand-gold-soft',
                                                             'active' => 'text-green-700 bg-green-100',
                                                             'completed' => 'text-green-900 bg-green-100',
                                                             'cancelled' => 'text-red-700 bg-red-100',
@@ -300,7 +300,7 @@
                                                     </span>
                                                 </td>
                                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
+                                                    <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-brand-green text-white text-xs font-semibold rounded-md hover:bg-brand-green-deep transition">
                                                         {{ __('Review') }}
                                                     </button>
                                                 </td>
@@ -314,7 +314,7 @@
 
                     <div x-show="activeTab === 'assigned'" x-cloak class="space-y-6">
                         <div>
-                            <h3 class="text-sm font-semibold uppercase tracking-wide text-indigo-700">{{ __('Assigned To Me') }}</h3>
+                            <h3 class="text-sm font-semibold uppercase tracking-wide text-brand-green-deep">{{ __('Assigned To Me') }}</h3>
                             @if($assignedToCurrentNurse->isEmpty())
                                 <p class="mt-2 text-sm text-gray-500">{{ __('No consultations are currently assigned to you.') }}</p>
                             @else
@@ -400,7 +400,7 @@
                                                             $statusClasses = [
                                                                 'pending' => 'text-orange-700 bg-orange-100',
                                                                 'assigned' => 'text-yellow-700 bg-yellow-100',
-                                                                'scheduled' => 'text-indigo-700 bg-indigo-100',
+                                                                'scheduled' => 'text-brand-green-deep bg-brand-gold-soft',
                                                                 'active' => 'text-green-700 bg-green-100',
                                                                 'completed' => 'text-green-900 bg-green-100',
                                                                 'cancelled' => 'text-red-700 bg-red-100',
@@ -459,7 +459,7 @@
                                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ trim(optional($request->nurse)->first_name . ' ' . optional($request->nurse)->last_name) ?: __('Unassigned') }}</td>
                                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
                                                     <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                        <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs text-blue-700 bg-blue-100">
+                                                        <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs text-brand-green-deep bg-brand-green-soft">
                                                             {{ ucfirst($request->request_status) }}
                                                         </span>
                                                     </td>
@@ -525,7 +525,7 @@
 
                     <div class="rounded-xl border border-gray-200 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Concern Category') }}</p>
-                        <p class="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700" x-text="selectedRequest?.concern_category ?? '{{ __('N/A') }}'"></p>
+                        <p class="mt-2 rounded-lg bg-brand-green-soft px-3 py-2 text-sm font-medium text-brand-green-deep" x-text="selectedRequest?.concern_category ?? '{{ __('N/A') }}'"></p>
                     </div>
 
                     <div class="rounded-xl border border-gray-200 p-3">
@@ -547,7 +547,7 @@
                             <ul class="mt-2 space-y-2 text-sm text-gray-900">
                                 <template x-for="file in selectedRequest.file_attachments" :key="file">
                                     <li class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                                        <a :href="file" target="_blank" class="font-medium text-indigo-600 hover:underline" x-text="file.split('/').pop()"></a>
+                                        <a :href="file" target="_blank" class="font-medium text-brand-green hover:underline" x-text="file.split('/').pop()"></a>
                                     </li>
                                 </template>
                             </ul>
