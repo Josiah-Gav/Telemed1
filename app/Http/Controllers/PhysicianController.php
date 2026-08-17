@@ -934,10 +934,12 @@ class PhysicianController extends Controller
         $currentPhysicianId = $physician->user_id;
         $this->syncMissedSlotsForPhysician($currentPhysicianId);
         $existingSlots = $this->getUpcomingSlotsForPhysician($currentPhysicianId);
+        $scheduledConsultations = $this->getScheduledConsultationsForPhysician($physician);
 
         return view('physician.scheduled_consultation', [
             'physician' => $physician,
             'existingSlots' => $existingSlots,
+            'scheduledConsultations' => $scheduledConsultations,
             'slotRoutes' => [
                 'refresh_url' => route('physician.scheduled_consultation.slots', ['physician' => $currentPhysicianId]),
                 'generate_url' => route('physician.scheduled_consultation.generate', ['physician' => $currentPhysicianId]),
@@ -955,6 +957,54 @@ class PhysicianController extends Controller
         return response()->json([
             'slots' => $this->getUpcomingSlotsForPhysician($physician->user_id),
         ]);
+    }
+
+    private function getScheduledConsultationsForPhysician(User $physician): array
+    {
+        $physicianId = $physician->user_id;
+
+        $consultations = Consultation::with(['patient', 'consultationSession.slot'])
+            ->where('request_status', 'scheduled')
+            ->where('assigned_physician_id', $physicianId)
+            ->orderByDesc('submitted_at')
+            ->get();
+
+        return $consultations->map(function (Consultation $consultation) use ($physicianId) {
+            $session = $consultation->consultationSession;
+            $slot = $session?->slot;
+
+            $scheduledDate = null;
+            $scheduledTimeLabel = null;
+            $scheduledAtIso = null;
+
+            if ($slot) {
+                $slotDate = $slot->slot_date?->format('Y-m-d') ?? (string) $slot->slot_date;
+                $start = CarbonImmutable::createFromFormat('H:i:s', $slot->start_time);
+                $end = CarbonImmutable::createFromFormat('H:i:s', $slot->end_time);
+                $scheduledDate = $slotDate;
+                $scheduledTimeLabel = $start->format('g:i A') . ' - ' . $end->format('g:i A');
+                $scheduledAtIso = CarbonImmutable::parse($slotDate . ' ' . $slot->start_time)->toIso8601String();
+            }
+
+            return [
+                'request_id' => $consultation->request_id,
+                'patient_name' => trim(optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name) ?: 'Unknown Patient',
+                'patient_is_online' => $this->isUserOnline($consultation->patient),
+                'concern_category' => $consultation->concern_category,
+                'priority_level' => $consultation->priority_level,
+                'consultation_type' => $consultation->type === 'follow_up' ? 'follow_up' : 'initial',
+                'scheduled_date' => $scheduledDate,
+                'scheduled_time_label' => $scheduledTimeLabel,
+                'scheduled_at_iso' => $scheduledAtIso,
+                'slot_status' => $slot?->status,
+                'start_url' => route('physician.consultations.start', ['physician' => $physicianId, 'consultation' => $consultation]),
+                'available_slots_url' => route('physician.consultations.available_slots', ['physician' => $physicianId, 'consultation' => $consultation]),
+                'schedule_url' => route('physician.consultations.schedule', ['physician' => $physicianId, 'consultation' => $consultation]),
+                'messaging_url' => $session
+                    ? route('consultations.messaging.show', $session)
+                    : null,
+            ];
+        })->values()->all();
     }
 
     public function generateScheduleSlots(GenerateScheduleSlotsRequest $request, User $physician): JsonResponse
