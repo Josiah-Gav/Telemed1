@@ -62,6 +62,51 @@
         window.patientConsultation = @json($patientConsultationPayload);
         window.physicianFollowUp = @json($physicianFollowUp);
 
+        function cancelFollowUpRequest(triggerElement) {
+            const cancelUrl = triggerElement?.dataset?.cancelUrl;
+
+            if (!cancelUrl) {
+                Swal.fire('Error', 'Unable to find the follow-up cancel URL.', 'error');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Cancel follow-up request?',
+                text: 'This action cannot be undone. The request will be marked as cancelled.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, cancel it',
+                cancelButtonText: 'Keep request',
+                confirmButtonColor: '#dc2626',
+            }).then((result) => {
+                if (!result.isConfirmed) {
+                    return;
+                }
+
+                fetch(cancelUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (!data.success) {
+                            throw new Error(data.message || 'Unable to cancel follow-up request.');
+                        }
+
+                        Swal.fire('Cancelled', data.message || 'Your follow-up request has been cancelled.', 'success').then(() => {
+                            window.location.reload();
+                        });
+                    })
+                    .catch((error) => {
+                        Swal.fire('Error', error.message || 'Unable to cancel follow-up request.', 'error');
+                    });
+            });
+        }
+
         function patientDashboard(initialConsultation, initialPhysicianFollowUp, refreshUrl, unreadUrl) {
             return {
                 consultation: initialConsultation,
@@ -206,7 +251,14 @@
                                     This request is currently marked as {{ strtolower($followUpStatus['status_label']) }}.
                                 </p>
                             </div>
-                            <span class="{{ $followUpStatus['status_badge_class'] }}">{{ $followUpStatus['status_label'] }}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="{{ $followUpStatus['status_badge_class'] }}">{{ $followUpStatus['status_label'] }}</span>
+                                @if(in_array($followUpStatus['status'], ['pending', 'forwarded'], true))
+                                    <button type="button" data-cancel-url="{{ route('patient.follow_up_requests.cancel', ['followUpRequest' => $followUpStatus['request_id']]) }}" onclick="cancelFollowUpRequest(this)" class="inline-flex items-center justify-center rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500">
+                                        Cancel Request
+                                    </button>
+                                @endif
+                            </div>
                         </div>
 
                         <div class="mt-6 grid gap-4 sm:grid-cols-2">

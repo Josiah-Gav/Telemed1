@@ -55,6 +55,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('patient.follow_up_list');
     Route::post('/consultation-sessions/{session}/follow-up-requests', [FollowUpRequestController::class, 'store'])
         ->name('patient.follow_up_requests.store');
+    Route::post('/follow-up-requests/{followUpRequest}/cancel', [FollowUpRequestController::class, 'cancel'])
+        ->name('patient.follow_up_requests.cancel');
 
     // Nurse-specific navigation pages
     Route::prefix('nurses/{nurse}')->group(function () {

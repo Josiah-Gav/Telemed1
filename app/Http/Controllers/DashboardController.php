@@ -127,6 +127,7 @@ class DashboardController extends Controller
         }
 
         return [
+            'request_id' => $followUpRequest->id,
             'exists' => true,
             'status' => $followUpRequest->status,
             'status_label' => ucfirst($followUpRequest->status),

@@ -313,6 +313,97 @@ it('lets a patient request a follow-up for a completed consultation within the a
     ]);
 });
 
+it('lets a patient cancel a follow-up request when it is pending or forwarded but not after approval', function () {
+    $patient = User::factory()->create([
+        'first_name' => 'Maya',
+        'last_name' => 'Reyes',
+        'role' => 'patient',
+        'user_type' => 'student',
+    ]);
+
+    $physician = User::factory()->create([
+        'first_name' => 'Noah',
+        'last_name' => 'Flores',
+        'role' => 'physician',
+        'user_type' => 'staff',
+        'specialization' => 'General Medicine',
+    ]);
+
+    $consultationRequest = Consultation::forceCreate([
+        'patient_id' => $patient->user_id,
+        'assigned_physician_id' => $physician->user_id,
+        'assigned_nurse_id' => null,
+        'concern_category' => 'follow-up care',
+        'symptoms_desc' => [['name' => 'Cough', 'severity' => 'mild']],
+        'online_reason' => 'Need follow-up review',
+        'request_status' => 'completed',
+        'priority_level' => 'Normal',
+        'file_attachments' => null,
+    ]);
+
+    $session = ConsultationSession::create([
+        'request_id' => $consultationRequest->request_id,
+        'physician_id' => $physician->user_id,
+        'slot_id' => null,
+        'consultation_status' => 'completed',
+        'assessment' => 'Follow-up assessment complete.',
+        'plan' => 'Continue observation.',
+        'recommendations' => 'Return if symptoms worsen.',
+        'diagnosis' => 'Recovered',
+        'cancellation_reason' => null,
+        'follow_up_required' => false,
+        'follow_up_date' => null,
+        'assigned_at' => now()->subHours(2),
+        'started_at' => now()->subHour(),
+        'completed_at' => now()->subMinutes(10),
+    ]);
+
+    $pendingRequest = \App\Models\FollowUpRequest::create([
+        'consultation_id' => $session->id,
+        'patient_id' => $patient->user_id,
+        'reason' => 'I still need a review.',
+        'status' => 'pending',
+    ]);
+
+    $this->actingAs($patient)
+        ->postJson(route('patient.follow_up_requests.cancel', ['followUpRequest' => $pendingRequest->id]))
+        ->assertJsonPath('success', true);
+
+    $pendingRequest->refresh();
+    $this->assertSame('cancelled', $pendingRequest->status);
+
+    $forwardedRequest = \App\Models\FollowUpRequest::create([
+        'consultation_id' => $session->id,
+        'patient_id' => $patient->user_id,
+        'reason' => 'I still need a review after review.',
+        'status' => 'forwarded',
+    ]);
+
+    $this->actingAs($patient)
+        ->postJson(route('patient.follow_up_requests.cancel', ['followUpRequest' => $forwardedRequest->id]))
+        ->assertJsonPath('success', true);
+
+    $forwardedRequest->refresh();
+    $this->assertSame('cancelled', $forwardedRequest->status);
+
+    $approvedRequest = \App\Models\FollowUpRequest::create([
+        'consultation_id' => $session->id,
+        'patient_id' => $patient->user_id,
+        'reason' => 'I need this support approved.',
+        'status' => 'approved',
+        'decided_by_physician_id' => $physician->user_id,
+        'decided_at' => now(),
+    ]);
+
+    $this->actingAs($patient)
+        ->postJson(route('patient.follow_up_requests.cancel', ['followUpRequest' => $approvedRequest->id]))
+        ->assertStatus(422)
+        ->assertJsonPath('success', false);
+
+    $approvedRequest->refresh();
+    $this->assertSame('approved', $approvedRequest->status);
+});
+
 it('lets a physician directly schedule a follow-up consultation with decision notes and no nurse screening', function () {
     $patient = User::factory()->create([
         'first_name' => 'Mina',

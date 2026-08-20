@@ -111,4 +111,42 @@ class FollowUpRequestController extends Controller
             ->route('patient.follow_up_list')
             ->with('status', 'Your follow-up request has been submitted for review.');
     }
+
+    public function cancel(Request $request, FollowUpRequest $followUpRequest)
+    {
+        $patient = Auth::user();
+
+        if ($patient?->role !== 'patient') {
+            abort(403, 'Unauthorized access.');
+        }
+
+        if ((int) $followUpRequest->patient_id !== (int) $patient->user_id) {
+            abort(403, 'Unauthorized access.');
+        }
+
+        if (!in_array($followUpRequest->status, ['pending', 'forwarded'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending or forwarded follow-up requests can be cancelled.',
+                ], 422);
+            }
+
+            return back()->withErrors(['follow_up_request' => 'Only pending or forwarded follow-up requests can be cancelled.']);
+        }
+
+        $followUpRequest->update([
+            'status' => 'cancelled',
+            'decision_notes' => $followUpRequest->decision_notes ?? 'Cancelled by patient.',
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Your follow-up request has been cancelled.',
+            ]);
+        }
+
+        return redirect()->route('patient.follow_up_list')->with('status', 'Your follow-up request has been cancelled.');
+    }
 }
