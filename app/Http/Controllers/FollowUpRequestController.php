@@ -7,12 +7,17 @@ use App\Models\ConsultationSession;
 use App\Models\FollowUpRequest;
 use App\Enums\NotificationType;
 use App\Services\NotificationService;
+use App\Services\ConsultationOwnershipService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class FollowUpRequestController extends Controller
 {
+    public function __construct(private readonly ConsultationOwnershipService $ownershipService)
+    {
+    }
+
     public function index()
     {
         $patient = Auth::user();
@@ -124,21 +129,21 @@ class FollowUpRequestController extends Controller
             abort(403, 'Unauthorized access.');
         }
 
-        if (!in_array($followUpRequest->status, ['pending', 'forwarded'], true)) {
+        try {
+            $this->ownershipService->cancelFollowUpByPatient(
+                (int) $followUpRequest->id,
+                (int) $patient->user_id
+            );
+        } catch (\RuntimeException $e) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Only pending or forwarded follow-up requests can be cancelled.',
+                    'message' => $e->getMessage(),
                 ], 422);
             }
 
-            return back()->withErrors(['follow_up_request' => 'Only pending or forwarded follow-up requests can be cancelled.']);
+            return back()->withErrors(['follow_up_request' => $e->getMessage()]);
         }
-
-        $followUpRequest->update([
-            'status' => 'cancelled',
-            'decision_notes' => $followUpRequest->decision_notes ?? 'Cancelled by patient.',
-        ]);
 
         if ($request->expectsJson()) {
             return response()->json([

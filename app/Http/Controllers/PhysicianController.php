@@ -17,11 +17,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use App\Enums\NotificationType;
+use App\Services\ConsultationOwnershipService;
 use App\Services\NotificationService;
 
 class PhysicianController extends Controller
 {
-    public function __construct()
+    public function __construct(private readonly ConsultationOwnershipService $ownershipService)
     {
         $this->middleware('auth');
     }
@@ -85,86 +86,20 @@ class PhysicianController extends Controller
             ], 403);
         }
 
-        if (!in_array($consultation->request_status, ['reviewed', 'assigned', 'scheduled'], true)) {
+        try {
+            $result = $this->ownershipService->startByPhysician(
+                (int) $consultation->request_id,
+                (int) Auth::id()
+            );
+
+            $consultation = $result['consultation'];
+            $session = $result['session'];
+        } catch (\RuntimeException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only reviewed, assigned, or scheduled consultations can be started.',
+                'message' => $e->getMessage(),
             ], 422);
         }
-
-        if ($consultation->assigned_physician_id && (int) $consultation->assigned_physician_id !== (int) Auth::id()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This consultation is already being handled by another physician.',
-            ], 422);
-        }
-
-        $shouldApplyScheduledGate = $consultation->request_status === 'scheduled';
-
-        $session = ConsultationSession::firstOrCreate(
-            ['request_id' => $consultation->request_id],
-            [
-                'physician_id' => Auth::id(),
-                'consultation_status' => $shouldApplyScheduledGate ? 'scheduled' : 'active',
-                'assessment' => 'Initial assessment pending.',
-                'plan' => 'Plan to be documented during consultation.',
-                'recommendations' => 'Recommendations to follow after evaluation.',
-                'assigned_at' => now(),
-                'started_at' => $shouldApplyScheduledGate ? null : now(),
-            ]
-        );
-
-        if ($shouldApplyScheduledGate) {
-            if (!$session->slot_id) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This consultation has no assigned schedule slot yet.',
-                ], 422);
-            }
-
-            $slot = ScheduleSlot::query()
-                ->where('slot_id', $session->slot_id)
-                ->where('physician_id', Auth::id())
-                ->first();
-
-            if (!$slot || $slot->status !== 'booked') {
-                $slotStatusMessage = 'The assigned schedule slot is not ready to start.';
-
-                if ($slot && $slot->status === 'missed') {
-                    $slotStatusMessage = 'The assigned schedule slot has been marked as missed. Please reschedule this consultation to an available slot.';
-                }
-
-                if ($slot && $slot->status === 'completed') {
-                    $slotStatusMessage = 'The assigned schedule slot is already completed and can no longer be used to start this consultation.';
-                }
-
-                return response()->json([
-                    'success' => false,
-                    'message' => $slotStatusMessage,
-                ], 422);
-            }
-
-            $canStartInfo = $this->buildCanStartInfoFromSlot($slot);
-            if (!$canStartInfo['can_start']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $canStartInfo['can_start_message'] ?? 'This consultation cannot be started yet.',
-                ], 422);
-            }
-        }
-
-        DB::transaction(function () use ($consultation, $session) {
-            $consultation->update([
-                'request_status' => 'active',
-                'assigned_physician_id' => Auth::id(),
-            ]);
-
-            $session->update([
-                'physician_id' => Auth::id(),
-                'consultation_status' => 'active',
-                'started_at' => now(),
-            ]);
-        });
 
         NotificationService::sendUnique(
             $consultation->patient_id,
@@ -299,85 +234,21 @@ class PhysicianController extends Controller
             ], 403);
         }
 
-        if (!in_array($consultation->request_status, ['reviewed', 'assigned', 'scheduled'], true)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only reviewed, assigned, or scheduled consultations can be scheduled.',
-            ], 422);
-        }
-
-        if ($consultation->assigned_physician_id && (int) $consultation->assigned_physician_id !== (int) Auth::id()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This consultation is already being handled by another physician.',
-            ], 422);
-        }
-
-        $selectedSlotId = (int) $validated['slot_id'];
-
         try {
-            DB::transaction(function () use ($consultation, $selectedSlotId) {
-                $slot = ScheduleSlot::query()
-                    ->where('slot_id', $selectedSlotId)
-                    ->where('physician_id', Auth::id())
-                    ->lockForUpdate()
-                    ->first();
+            $result = $this->ownershipService->scheduleByPhysician(
+                (int) $consultation->request_id,
+                (int) Auth::id(),
+                (int) $validated['slot_id']
+            );
 
-                if (!$slot || $slot->status !== 'available') {
-                    throw new \RuntimeException('Selected slot is no longer available.');
-                }
-
-                if ($this->isScheduleSlotInPast($slot)) {
-                    throw new \RuntimeException('Selected slot is already in the past. Please choose a future slot.');
-                }
-
-                $session = ConsultationSession::query()->lockForUpdate()->firstOrCreate(
-                    ['request_id' => $consultation->request_id],
-                    [
-                        'physician_id' => Auth::id(),
-                        'consultation_status' => 'scheduled',
-                        'assessment' => 'Initial assessment pending.',
-                        'plan' => 'Plan to be documented during consultation.',
-                        'recommendations' => 'Recommendations to follow after evaluation.',
-                        'assigned_at' => now(),
-                    ]
-                );
-
-                $previousSlotId = (int) ($session->slot_id ?? 0);
-
-                if ($previousSlotId > 0 && $previousSlotId !== (int) $slot->slot_id) {
-                    $previousSlot = ScheduleSlot::query()
-                        ->where('slot_id', $previousSlotId)
-                        ->where('physician_id', Auth::id())
-                        ->lockForUpdate()
-                        ->first();
-
-                    if ($previousSlot && $previousSlot->status === 'booked') {
-                        $previousSlot->update(['status' => 'available']);
-                    }
-                }
-
-                $slot->update(['status' => 'booked']);
-
-                $consultation->update([
-                    'request_status' => 'scheduled',
-                    'assigned_physician_id' => Auth::id(),
-                ]);
-
-                $session->update([
-                    'physician_id' => Auth::id(),
-                    'consultation_status' => 'scheduled',
-                    'slot_id' => $slot->slot_id,
-                ]);
-            });
+            $consultation = $result['consultation'];
+            $slot = $result['slot'];
         } catch (\RuntimeException $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
             ], 422);
         }
-
-        $slot = ScheduleSlot::query()->where('slot_id', $validated['slot_id'])->first();
 
         NotificationService::sendUnique(
             $consultation->patient_id,
@@ -405,18 +276,18 @@ class PhysicianController extends Controller
             'rejection_reason' => 'required|string|max:1000',
         ]);
 
-        if ($consultation->request_status !== 'reviewed') {
+        try {
+            $consultation = $this->ownershipService->rejectReviewedByPhysician(
+                (int) $consultation->request_id,
+                (int) Auth::id(),
+                (string) $validated['rejection_reason']
+            );
+        } catch (\RuntimeException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only reviewed consultations can be rejected.',
+                'message' => $e->getMessage(),
             ], 422);
         }
-
-        $consultation->update([
-            'request_status' => 'rejected',
-            'rejection_reason' => $validated['rejection_reason'],
-            'assigned_physician_id' => Auth::id(),
-        ]);
 
         NotificationService::send(
             $consultation->patient_id,
@@ -462,25 +333,27 @@ class PhysicianController extends Controller
             'decision_notes' => 'nullable|string|max:2000',
         ]);
 
-        if ($followUpRequest->status !== 'forwarded') {
+        try {
+            $followUpRequest = $this->ownershipService->decideFollowUpByPhysician(
+                (int) $followUpRequest->id,
+                (int) Auth::id(),
+                (string) $validated['decision'],
+                $validated['mode'] ?? null,
+                isset($validated['slot_id']) ? (int) $validated['slot_id'] : null,
+                $validated['decision_notes'] ?? null
+            );
+        } catch (\RuntimeException $e) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Only forwarded follow-up requests can be decided.',
+                    'message' => $e->getMessage(),
                 ], 422);
             }
 
-            return back()->withErrors(['follow_up_request' => 'Only forwarded follow-up requests can be decided.']);
+            return back()->withErrors(['follow_up_request' => $e->getMessage()]);
         }
 
         if ($validated['decision'] === 'rejected') {
-            $followUpRequest->update([
-                'status' => 'rejected',
-                'decided_by_physician_id' => Auth::id(),
-                'decided_at' => now(),
-                'decision_notes' => $validated['decision_notes'] ?? null,
-            ]);
-
             NotificationService::send(
                 $followUpRequest->patient_id,
                 NotificationType::FOLLOW_UP_REJECTED,
@@ -500,45 +373,6 @@ class PhysicianController extends Controller
             }
 
             return back()->with('status', 'Follow-up request rejected.');
-        }
-
-        $mode = $validated['mode'];
-
-        try {
-            DB::transaction(function () use ($followUpRequest, $validated, $mode) {
-                $lockedFollowUpRequest = FollowUpRequest::query()
-                    ->whereKey($followUpRequest->id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if (!$lockedFollowUpRequest || $lockedFollowUpRequest->status !== 'forwarded') {
-                    throw new \RuntimeException('This follow-up request is no longer available for approval.');
-                }
-
-                $this->createFollowUpConsultationFromSource(
-                    $lockedFollowUpRequest->consultation,
-                    Auth::id(),
-                    $mode,
-                    $validated['slot_id'] ?? null,
-                    $lockedFollowUpRequest->id
-                );
-
-                $lockedFollowUpRequest->update([
-                    'status' => 'approved',
-                    'decided_by_physician_id' => Auth::id(),
-                    'decided_at' => now(),
-                    'decision_notes' => $validated['decision_notes'] ?? null,
-                ]);
-            });
-        } catch (\RuntimeException $e) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $e->getMessage(),
-                ], 422);
-            }
-
-            return back()->withErrors(['follow_up_request' => $e->getMessage()]);
         }
 
         NotificationService::sendUnique(
@@ -1373,16 +1207,38 @@ class PhysicianController extends Controller
 
     private function createFollowUpConsultationFromSource(ConsultationSession $sourceSession, int $physicianId, string $mode, ?int $slotId = null, ?int $followUpRequestId = null): Consultation
     {
+        $lockedSourceSession = ConsultationSession::query()
+            ->whereKey($sourceSession->id)
+            ->lockForUpdate()
+            ->first();
+
+        if (!$lockedSourceSession) {
+            throw new \RuntimeException('Source consultation was not found.');
+        }
+
+        $sourceSession = $lockedSourceSession;
         $sourceSession->loadMissing('request');
 
         if (!$sourceSession->request) {
             throw new \RuntimeException('Source consultation request was not found.');
         }
 
+        $lockedSourceRequest = Consultation::query()
+            ->where('request_id', $sourceSession->request->request_id)
+            ->lockForUpdate()
+            ->first();
+
+        if (!$lockedSourceRequest) {
+            throw new \RuntimeException('Source consultation request was not found.');
+        }
+
+        $sourceSession->setRelation('request', $lockedSourceRequest);
+
         $existingActiveFollowUp = Consultation::query()
             ->where('type', 'follow_up')
             ->where('parent_consultation_id', $sourceSession->id)
             ->whereIn('request_status', ['pending', 'scheduled', 'active'])
+            ->lockForUpdate()
             ->exists();
 
         if ($existingActiveFollowUp) {

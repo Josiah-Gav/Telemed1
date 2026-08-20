@@ -8,14 +8,16 @@ use App\Models\Consultation;
 use App\Models\FollowUpRequest;
 use App\Models\User;
 use App\Enums\NotificationType;
+use App\Services\ConsultationOwnershipService;
 use App\Services\NotificationService;
 
 class NurseController extends Controller
 {
-    public function __construct()
+    public function __construct(private readonly ConsultationOwnershipService $ownershipService)
     {
         $this->middleware('auth');
     }
+
 
     private function authorizeNurse(User $nurse)
     {
@@ -83,23 +85,22 @@ class NurseController extends Controller
             'decision_notes' => 'nullable|string|max:2000',
         ]);
 
-        if ($followUpRequest->status !== 'pending') {
+        try {
+            $followUpRequest = $this->ownershipService->forwardFollowUpByNurse(
+                (int) $followUpRequest->id,
+                (int) Auth::id(),
+                $validated['decision_notes'] ?? null
+            );
+        } catch (\RuntimeException $e) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Only pending follow-up requests can be forwarded.',
+                    'message' => $e->getMessage(),
                 ], 422);
             }
 
-            return back()->withErrors(['follow_up_request' => 'Only pending follow-up requests can be forwarded.']);
+            return back()->withErrors(['follow_up_request' => $e->getMessage()]);
         }
-
-        $followUpRequest->update([
-            'status' => 'forwarded',
-            'reviewed_by_nurse_id' => Auth::id(),
-            'reviewed_at' => now(),
-            'decision_notes' => $validated['decision_notes'] ?? null,
-        ]);
 
         NotificationService::sendToRole(
             'physician',
@@ -131,23 +132,22 @@ class NurseController extends Controller
             'decision_notes' => 'required|string|max:2000',
         ]);
 
-        if ($followUpRequest->status !== 'pending') {
+        try {
+            $followUpRequest = $this->ownershipService->rejectFollowUpByNurse(
+                (int) $followUpRequest->id,
+                (int) Auth::id(),
+                (string) $validated['decision_notes']
+            );
+        } catch (\RuntimeException $e) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Only pending follow-up requests can be rejected.',
+                    'message' => $e->getMessage(),
                 ], 422);
             }
 
-            return back()->withErrors(['follow_up_request' => 'Only pending follow-up requests can be rejected.']);
+            return back()->withErrors(['follow_up_request' => $e->getMessage()]);
         }
-
-        $followUpRequest->update([
-            'status' => 'rejected',
-            'reviewed_by_nurse_id' => Auth::id(),
-            'reviewed_at' => now(),
-            'decision_notes' => $validated['decision_notes'],
-        ]);
 
         NotificationService::send(
             $followUpRequest->patient_id,

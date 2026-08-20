@@ -13,10 +13,15 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\FollowUpRequest;
 use App\Enums\NotificationType;
 use App\Services\NotificationService;
+use App\Services\ConsultationOwnershipService;
 use App\Models\User;
 
 class ConsultationController extends Controller
 {
+    public function __construct(private readonly ConsultationOwnershipService $ownershipService)
+    {
+    }
+
     /**
      * Display a listing of the consultations.
      */
@@ -279,11 +284,17 @@ class ConsultationController extends Controller
             'rejection_reason' => 'required|string|max:1000',
         ]);
 
-        // Update the consultation status and save the rejection reason
-        $consultation->update([
-            'request_status' => 'rejected',
-            'rejection_reason' => $request->input('rejection_reason'),
-        ]);
+        try {
+            $consultation = $this->ownershipService->rejectByNurse(
+                (int) $consultation->request_id,
+                (string) $request->input('rejection_reason')
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
 
         NotificationService::send(
             $consultation->patient_id,
@@ -306,20 +317,18 @@ class ConsultationController extends Controller
             'priority_level' => 'required|in:High,Normal',
         ]);
 
-        if ($consultation->request_status !== 'pending') {
+        try {
+            $consultation = $this->ownershipService->claimByNurse(
+                (int) $consultation->request_id,
+                (int) auth()->id(),
+                (string) $validated['priority_level']
+            );
+        } catch (\RuntimeException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only pending consultations can be approved.',
+                'message' => $e->getMessage(),
             ], 422);
         }
-
-        // "approved" is not a valid enum value in consultation_requests.request_status.
-        // Move approved requests to "reviewed" so they exit the pending inbox.
-        $consultation->update([
-            'request_status' => 'reviewed',
-            'assigned_nurse_id' => auth()->id(),
-            'priority_level' => $validated['priority_level'],
-        ]);
 
         // Notify the patient that their request was reviewed.
         NotificationService::send(
@@ -359,17 +368,17 @@ class ConsultationController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized action.'], 403);
         }
 
-        if (!in_array($consultation->request_status, ['pending', 'reviewed'], true)) {
+        try {
+            $consultation = $this->ownershipService->cancelByPatient(
+                (int) $consultation->request_id,
+                (int) auth()->id()
+            );
+        } catch (\RuntimeException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only pending or reviewed consultations can be cancelled.',
+                'message' => $e->getMessage(),
             ], 422);
         }
-
-        // Update the consultation status to "cancelled"
-        $consultation->update([
-            'request_status' => 'cancelled',
-        ]);
 
         // Notify the assigned nurse (if any) that the patient cancelled the request.
         if ($consultation->assigned_nurse_id) {
