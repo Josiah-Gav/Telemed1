@@ -457,20 +457,20 @@ class PhysicianController extends Controller
 
         $validated = $request->validate([
             'decision' => 'required|in:approved,rejected',
-            'mode' => 'nullable|in:immediate,scheduled',
+            'mode' => 'required_if:decision,approved|in:immediate,scheduled',
             'slot_id' => 'nullable|integer',
             'decision_notes' => 'nullable|string|max:2000',
         ]);
 
-        if (!in_array($followUpRequest->status, ['forwarded', 'approved'], true)) {
+        if ($followUpRequest->status !== 'forwarded') {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Only forwarded or approved follow-up requests can be decided.',
+                    'message' => 'Only forwarded follow-up requests can be decided.',
                 ], 422);
             }
 
-            return back()->withErrors(['follow_up_request' => 'Only forwarded or approved follow-up requests can be decided.']);
+            return back()->withErrors(['follow_up_request' => 'Only forwarded follow-up requests can be decided.']);
         }
 
         if ($validated['decision'] === 'rejected') {
@@ -502,58 +502,28 @@ class PhysicianController extends Controller
             return back()->with('status', 'Follow-up request rejected.');
         }
 
-        $mode = $validated['mode'] ?? null;
-
-        if ($mode === null) {
-            $followUpRequest->update([
-                'status' => 'approved',
-                'decided_by_physician_id' => Auth::id(),
-                'decided_at' => now(),
-                'decision_notes' => $validated['decision_notes'] ?? null,
-            ]);
-
-            NotificationService::sendUnique(
-                $followUpRequest->patient_id,
-                NotificationType::FOLLOW_UP_APPROVED,
-                'Follow-up Request Approved',
-                'Your follow-up request has been approved by the physician.',
-                [
-                    'follow_up_request_id' => $followUpRequest->id,
-                    'consultation_id' => $followUpRequest->consultation_id,
-                ]
-            );
-
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Follow-up request approved. Choose to start now or schedule later.',
-                ]);
-            }
-
-            return back()->with('status', 'Follow-up request approved. Choose to start now or schedule later.');
-        }
-
-        if (!in_array($mode, ['immediate', 'scheduled'], true)) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Physician must choose immediate start or scheduled slot when approving.',
-                ], 422);
-            }
-
-            return back()->withErrors(['mode' => 'Physician must choose immediate start or scheduled slot when approving.']);
-        }
+        $mode = $validated['mode'];
 
         try {
             DB::transaction(function () use ($followUpRequest, $validated, $mode) {
+                $lockedFollowUpRequest = FollowUpRequest::query()
+                    ->whereKey($followUpRequest->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$lockedFollowUpRequest || $lockedFollowUpRequest->status !== 'forwarded') {
+                    throw new \RuntimeException('This follow-up request is no longer available for approval.');
+                }
+
                 $this->createFollowUpConsultationFromSource(
-                    $followUpRequest->consultation,
+                    $lockedFollowUpRequest->consultation,
                     Auth::id(),
                     $mode,
-                    $validated['slot_id'] ?? null
+                    $validated['slot_id'] ?? null,
+                    $lockedFollowUpRequest->id
                 );
 
-                $followUpRequest->update([
+                $lockedFollowUpRequest->update([
                     'status' => 'approved',
                     'decided_by_physician_id' => Auth::id(),
                     'decided_at' => now(),
@@ -1401,7 +1371,7 @@ class PhysicianController extends Controller
         ];
     }
 
-    private function createFollowUpConsultationFromSource(ConsultationSession $sourceSession, int $physicianId, string $mode, ?int $slotId = null): Consultation
+    private function createFollowUpConsultationFromSource(ConsultationSession $sourceSession, int $physicianId, string $mode, ?int $slotId = null, ?int $followUpRequestId = null): Consultation
     {
         $sourceSession->loadMissing('request');
 
@@ -1438,6 +1408,7 @@ class PhysicianController extends Controller
         $newSessionData = [
             'request_id' => $newConsultation->request_id,
             'physician_id' => $physicianId,
+            'follow_up_request_id' => $followUpRequestId,
             'consultation_status' => $mode === 'immediate' ? 'active' : 'scheduled',
             'assessment' => 'Initial assessment pending.',
             'plan' => 'Plan to be documented during consultation.',

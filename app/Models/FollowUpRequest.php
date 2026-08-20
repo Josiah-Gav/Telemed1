@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class FollowUpRequest extends Model
 {
@@ -32,6 +33,11 @@ class FollowUpRequest extends Model
     public function consultation(): BelongsTo
     {
         return $this->belongsTo(ConsultationSession::class, 'consultation_id', 'id');
+    }
+
+    public function followUpConsultation(): HasOne
+    {
+        return $this->hasOne(ConsultationSession::class, 'follow_up_request_id', 'id');
     }
 
     public function patient(): BelongsTo

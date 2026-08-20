@@ -461,6 +461,7 @@ it('notifies the patient when a physician approves a follow-up request', functio
             'followUpRequest' => $followUpRequest->id,
         ]), [
             'decision' => 'approved',
+            'mode' => 'immediate',
         ])
         ->assertOk()
         ->assertJsonPath('success', true);

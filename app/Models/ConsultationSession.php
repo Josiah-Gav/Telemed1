@@ -18,6 +18,7 @@ class ConsultationSession extends Model
         'request_id',
         'physician_id',
         'slot_id',
+        'follow_up_request_id',
         'consultation_status',
         'assessment',
         'plan',
@@ -67,6 +68,11 @@ class ConsultationSession extends Model
     public function followUpRequests(): HasMany
     {
         return $this->hasMany(FollowUpRequest::class, 'consultation_id', 'id');
+    }
+
+    public function followUpRequest(): BelongsTo
+    {
+        return $this->belongsTo(FollowUpRequest::class, 'follow_up_request_id', 'id');
     }
 
     public function hasMeaningfulAssessment(): bool
