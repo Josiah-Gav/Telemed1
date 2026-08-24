@@ -224,6 +224,33 @@ it('fails loudly without naming the value when a credential is missing', functio
         ->toThrow(RuntimeException::class, 'Jitsi configuration [services.jitsi.private_key] is not set.');
 });
 
+it('signs with a valid key that has a blank line after the PEM header', function () {
+    [$privateKey, $publicKey] = jitsiTestKeypair();
+
+    // Reproduces the real-world defect: escaping a key onto a single .env line leaves a
+    // blank line just after BEGIN. OpenSSL 3 reads that as a PEM headers section and
+    // refuses the block outright, so the service has to rebuild it before signing.
+    $body = preg_replace('/\s+/', '', preg_replace('/-----[A-Z ]+-----/', '', $privateKey));
+    $mangled = "-----BEGIN PRIVATE KEY-----\n\n"
+        .chunk_split($body, 64, "\n")
+        ."\n-----END PRIVATE KEY-----\n";
+
+    expect(openssl_pkey_get_private($mangled))->toBeFalse();
+
+    config()->set('services.jitsi.private_key', $mangled);
+
+    $token = jitsiDecode($this->jitsi->issueToken('room1234', 'Dr Reyes', true));
+
+    $verified = openssl_verify(
+        $token['signing_input'],
+        $token['signature'],
+        $publicKey,
+        OPENSSL_ALGO_SHA256
+    );
+
+    expect($verified)->toBe(1);
+});
+
 it('rejects an unparseable private key without echoing it', function () {
     config()->set('services.jitsi.private_key', 'not-a-pem-block');
 

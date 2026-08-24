@@ -767,7 +767,7 @@
                         }
                     });
                 },
-                loadJitsiExternalApi(domain) {
+                loadJitsiExternalApi(domain, tenant) {
                     if (window.JitsiMeetExternalAPI) {
                         return Promise.resolve();
                     }
@@ -775,7 +775,10 @@
                     if (!this._jitsiScriptPromise) {
                         this._jitsiScriptPromise = new Promise((resolve, reject) => {
                             const script = document.createElement('script');
-                            script.src = `https://${domain}/external_api.js`;
+                            // JaaS serves the library under the tenant path
+                            // (/{appId}/external_api.js); the bare-domain URL 404s.
+                            // Both segments come from the authorized join response.
+                            script.src = `https://${domain}/${tenant}/external_api.js`;
                             script.async = true;
                             script.onload = () => resolve();
                             script.onerror = () => reject(new Error('Unable to load the video call client.'));
@@ -786,7 +789,12 @@
                     return this._jitsiScriptPromise;
                 },
                 startJitsiCall(joinData) {
-                    this.loadJitsiExternalApi(joinData.domain).then(() => {
+                    // room_name is the "{appId}/{room}" iframe form, so the tenant the
+                    // script URL needs is already in the authorized response — no extra
+                    // field and no hard-coded app id required.
+                    const tenant = String(joinData.room_name || '').split('/')[0];
+
+                    this.loadJitsiExternalApi(joinData.domain, tenant).then(() => {
                         this.$nextTick(() => {
                             const container = this.$refs.videoContainer;
                             if (!container) return;

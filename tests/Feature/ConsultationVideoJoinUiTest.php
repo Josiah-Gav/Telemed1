@@ -130,7 +130,7 @@ it('wires the join button to the real authorized /video/join route, not a bypass
     );
 
     $html = $response->getContent();
-    $joinFn = substr($html, strpos($html, 'joinVideoCall() {'), strpos($html, 'loadJitsiExternalApi(domain)') - strpos($html, 'joinVideoCall() {'));
+    $joinFn = substr($html, strpos($html, 'joinVideoCall() {'), strpos($html, 'loadJitsiExternalApi(domain, tenant) {') - strpos($html, 'joinVideoCall() {'));
 
     expect($joinFn)->toContain('url: this.videoJoinUrl')
         ->toContain("method: 'POST'")
@@ -157,7 +157,14 @@ it('constructs the jitsi client only inside an authorized start/join success pat
     // external_api.js is not a static <script src> tag: it must load lazily, after an
     // authorized join, using the domain the server returned — never eagerly on page load.
     expect($html)->not->toMatch('/<script[^>]+src="https:\/\/[^"]*\/external_api\.js"/');
-    expect($html)->toContain('script.src = `https://${domain}/external_api.js`');
+
+    // JaaS serves the library under the tenant path. The bare-domain URL
+    // (https://8x8.vc/external_api.js) 404s, so the tenant segment is required.
+    expect($html)->toContain('script.src = `https://${domain}/${tenant}/external_api.js`')
+        ->not->toContain('script.src = `https://${domain}/external_api.js`');
+
+    // The tenant is derived from the authorized response, never hard-coded in the page.
+    expect($html)->toContain("const tenant = String(joinData.room_name || '').split('/')[0]");
 });
 
 it('reads only the active boolean from presence, never a room or credential field', function () {

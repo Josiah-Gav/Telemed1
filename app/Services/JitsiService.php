@@ -92,7 +92,9 @@ class JitsiService
 
     private function sign(string $signingInput): string
     {
-        $privateKey = openssl_pkey_get_private($this->requiredConfig('private_key'));
+        $privateKey = openssl_pkey_get_private(
+            $this->normalizePem($this->requiredConfig('private_key'))
+        );
 
         if ($privateKey === false) {
             // Deliberately says nothing about the key itself.
@@ -104,6 +106,31 @@ class JitsiService
         }
 
         return $signature;
+    }
+
+    /**
+     * Rebuild a PEM block from its base64 body, discarding stray whitespace.
+     *
+     * A key escaped onto a single .env line commonly ends up with a blank line just
+     * after the BEGIN marker (an extra "\n"). OpenSSL 3 reads a blank line there as
+     * the start of an RFC 7468 PEM headers section and rejects the whole block with a
+     * generic "DECODER routines::unsupported", even though the base64 body is intact.
+     * Rebuilding the block sidesteps that without altering the key material, so a
+     * correct key works regardless of how it was pasted.
+     *
+     * Input that is not a PEM block is returned untouched so openssl reports it.
+     */
+    private function normalizePem(string $key): string
+    {
+        if (! preg_match('/-----BEGIN ([A-Z0-9 ]+)-----(.*?)-----END \1-----/s', $key, $matches)) {
+            return $key;
+        }
+
+        $body = preg_replace('/\s+/', '', $matches[2]);
+
+        return "-----BEGIN {$matches[1]}-----\n"
+            .chunk_split($body, 64, "\n")
+            ."-----END {$matches[1]}-----\n";
     }
 
     private function encodeSegment(array $segment): string
