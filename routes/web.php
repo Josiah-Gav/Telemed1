@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\ConsultationMessageController;
+use App\Http\Controllers\ConsultationVideoController;
 use App\Http\Controllers\FollowUpRequestController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PresenceController;
@@ -154,6 +155,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('consultations.messaging.presence');
     Route::post('/consultation-sessions/{session}/offline', [ConsultationMessageController::class, 'markOffline'])
         ->name('consultations.messaging.offline');
+    // Video consultation. Physicians start and end; patients may only join a running room.
+    Route::post('/consultation-sessions/{session}/video/start', [ConsultationVideoController::class, 'start'])
+        ->middleware('throttle:30,1')
+        ->name('consultations.video.start');
+    Route::post('/consultation-sessions/{session}/video/join', [ConsultationVideoController::class, 'join'])
+        ->middleware('throttle:30,1')
+        ->name('consultations.video.join');
+    Route::post('/consultation-sessions/{session}/video/end', [ConsultationVideoController::class, 'end'])
+        ->name('consultations.video.end');
+
     Route::get('/consultation-sessions/{session}/prescription/download', [ConsultationMessageController::class, 'downloadPrescription'])
         ->name('consultations.messaging.prescription.download');
     Route::get('/consultation-message-attachments/{attachment}/download', [ConsultationMessageController::class, 'downloadAttachment'])

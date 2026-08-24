@@ -55,8 +55,9 @@ return [
         'private_key' => str_replace('\n', "\n", (string) env('JITSI_PRIVATE_KEY')),
 
         // Token lifetime in seconds. Tokens are minted per join request and never stored,
-        // so this only needs to outlast a single consultation.
-        'jwt_ttl' => 7200,
+        // so this only needs to outlast a single consultation. Kept short to limit the
+        // blast radius of a leaked token; rejoining simply mints a fresh one.
+        'jwt_ttl' => 1800,
     ],
 
 ];

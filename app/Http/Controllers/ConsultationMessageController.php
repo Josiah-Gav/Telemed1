@@ -6,6 +6,7 @@ use App\Models\ConsultationSession;
 use App\Models\Message;
 use App\Models\User;
 use App\Enums\NotificationType;
+use App\Services\ConsultationVideoService;
 use App\Services\NotificationService;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Http\JsonResponse;
@@ -215,7 +216,7 @@ class ConsultationMessageController extends Controller
         ]);
     }
 
-    public function complete(ConsultationSession $session): JsonResponse
+    public function complete(ConsultationSession $session, ConsultationVideoService $videoSessions): JsonResponse
     {
         $this->authorize('viewMessaging', $session);
 
@@ -240,7 +241,7 @@ class ConsultationMessageController extends Controller
         $consultationRequest = $session->request;
         abort_unless($consultationRequest, 404);
 
-        DB::transaction(function () use ($session) {
+        DB::transaction(function () use ($session, $videoSessions) {
             $lockedSession = ConsultationSession::query()
                 ->whereKey($session->id)
                 ->lockForUpdate()
@@ -269,6 +270,12 @@ class ConsultationMessageController extends Controller
                     ]);
                 }
             }
+
+            // Close any running video call last, inside this same transaction, so the
+            // room can never outlive the consultation and a rollback leaves it open.
+            // Only rows with a null ended_at are touched, so historical sessions keep
+            // their original timestamp.
+            $videoSessions->end($lockedSession);
         });
 
         $session->refresh();
