@@ -83,6 +83,64 @@
                     </div>
                 </div>
 
+                <div
+                    x-show="!inVideoCall && consultationStatus === 'active' && (isAssignedPhysician || videoActive)"
+                    x-cloak
+                    class="border-b border-slate-200 bg-emerald-50 px-6 py-4"
+                >
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="text-sm font-semibold text-emerald-800" x-text="videoActive ? 'Video consultation is live.' : 'No video consultation is running.'"></p>
+                            <p class="text-xs text-emerald-700" x-show="videoActive">Join when you're ready.</p>
+                            <p class="text-xs text-emerald-700" x-show="!videoActive && isAssignedPhysician">Starting will open the room and invite your patient to join.</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button
+                                type="button"
+                                x-show="isAssignedPhysician && !videoActive"
+                                @click="startVideoCall"
+                                :disabled="isStartingVideo"
+                                class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                                <span x-show="!isStartingVideo">Start Video Consultation</span>
+                                <span x-show="isStartingVideo">Starting...</span>
+                            </button>
+                            <button
+                                type="button"
+                                x-show="videoActive"
+                                @click="joinVideoCall"
+                                :disabled="isJoiningVideo"
+                                class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                                <span x-show="!isJoiningVideo">Join Video Consultation</span>
+                                <span x-show="isJoiningVideo">Joining...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="inVideoCall" x-cloak class="border-b border-slate-200 bg-slate-900 px-4 py-4">
+                    <div class="mb-3 flex items-center justify-between">
+                        <p class="text-sm font-semibold text-white">Video consultation</p>
+                        <div class="flex items-center gap-2">
+                            <button type="button" @click="leaveVideoCall" class="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20">
+                                Leave call
+                            </button>
+                            <button
+                                type="button"
+                                x-show="isAssignedPhysician"
+                                @click="endVideoCall"
+                                :disabled="isEndingVideo"
+                                class="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                            >
+                                <span x-show="!isEndingVideo">End call for everyone</span>
+                                <span x-show="isEndingVideo">Ending...</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div x-ref="videoContainer" class="h-[60vh] w-full overflow-hidden rounded-xl bg-black"></div>
+                </div>
+
                 <div x-show="activeTab === 'messages'" x-cloak>
                     <div id="messagesContainer" class="h-[55vh] overflow-y-auto bg-gradient-to-b from-white to-slate-50 px-4 py-4 space-y-3">
                         <template x-if="messages.length === 0">
@@ -415,6 +473,22 @@
                 peerName: '',
                 offlineUrl: '{{ route('consultations.messaging.offline', $session) }}',
                 saveMessage: '',
+                // Video consultation. videoActive reflects the presence poll only — it is
+                // never trusted as authorization. The Join click is what actually asks the
+                // server (POST /video/join), and that response is the only place a JWT or
+                // room identifier is ever obtained.
+                videoActive: false,
+                // Only affects which buttons render. The server re-checks the assigned
+                // physician on every start/end request, so this is never load-bearing.
+                isAssignedPhysician: @js($isAssignedPhysician),
+                videoStartUrl: '{{ route('consultations.video.start', $session) }}',
+                videoJoinUrl: '{{ route('consultations.video.join', $session) }}',
+                videoEndUrl: '{{ route('consultations.video.end', $session) }}',
+                isStartingVideo: false,
+                isJoiningVideo: false,
+                isEndingVideo: false,
+                inVideoCall: false,
+                jitsiApi: null,
                 consultationStatus: @js($session->consultation_status),
                 consultationCompletedAt: @js(optional($session->completed_at)?->toIso8601String()),
                 clinical: {
@@ -573,6 +647,18 @@
                             this.peerOnline = Boolean(peer.is_online);
                             this.peerIsTyping = Boolean(peer.is_typing);
 
+                            // Only the boolean is ever read here. video.jwt, video.room_name,
+                            // and video.domain do not exist on this endpoint's response, and
+                            // even if they did, presence must never be treated as a source of
+                            // join credentials — only POST /video/join is.
+                            this.videoActive = Boolean((data.video || {}).active);
+
+                            if (!this.videoActive && this.inVideoCall) {
+                                // The physician ended the call while we were in it: tear down
+                                // the local iframe rather than leaving a dead call on screen.
+                                this.leaveVideoCall();
+                            }
+
                             if (peer.is_typing) {
                                 this.presenceText = this.peerName + ' is typing...';
                                 return;
@@ -581,6 +667,161 @@
                             this.presenceText = this.formatLastSeen(peer.last_seen_at);
                         }
                     });
+                },
+                startVideoCall() {
+                    if (this.isStartingVideo || this.inVideoCall) return;
+
+                    this.isStartingVideo = true;
+                    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+
+                    $.ajax({
+                        url: this.videoStartUrl,
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        success: (data) => {
+                            if (!data.success) {
+                                Swal.fire('Unable to start', data.message || 'Unable to start the video consultation.', 'error');
+                                return;
+                            }
+
+                            // /video/start returns the same payload shape as /video/join,
+                            // so the physician goes straight into the room they just opened.
+                            this.videoActive = true;
+                            this.startJitsiCall(data);
+                        },
+                        error: (xhr) => {
+                            const message = xhr.responseJSON?.message || 'Unable to start the video consultation.';
+                            Swal.fire('Unable to start', message, 'error');
+                        },
+                        complete: () => {
+                            this.isStartingVideo = false;
+                        }
+                    });
+                },
+                endVideoCall() {
+                    if (this.isEndingVideo) return;
+
+                    this.isEndingVideo = true;
+                    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+
+                    $.ajax({
+                        url: this.videoEndUrl,
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        success: () => {
+                            // Closes the room server-side; the patient's next presence poll
+                            // sees video.active false and tears their iframe down too.
+                            this.videoActive = false;
+                            this.leaveVideoCall();
+                        },
+                        error: (xhr) => {
+                            const message = xhr.responseJSON?.message || 'Unable to end the video consultation.';
+                            Swal.fire('Unable to end', message, 'error');
+                        },
+                        complete: () => {
+                            this.isEndingVideo = false;
+                        }
+                    });
+                },
+                joinVideoCall() {
+                    if (this.isJoiningVideo || this.inVideoCall) return;
+
+                    this.isJoiningVideo = true;
+                    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+
+                    $.ajax({
+                        url: this.videoJoinUrl,
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        success: (data) => {
+                            if (!data.success) {
+                                Swal.fire('Unable to join', data.message || 'Unable to join the video consultation.', 'error');
+                                return;
+                            }
+
+                            // The join response is the ONLY place domain/room_name/jwt come
+                            // from. They are never read from presence and never hard-coded.
+                            this.startJitsiCall(data);
+                        },
+                        error: (xhr) => {
+                            const message = xhr.responseJSON?.message || 'Unable to join the video consultation.';
+                            Swal.fire('Unable to join', message, 'error');
+
+                            if (xhr.status === 409) {
+                                // The physician ended the room between the last presence poll
+                                // and this click; reflect that immediately.
+                                this.videoActive = false;
+                            }
+                        },
+                        complete: () => {
+                            this.isJoiningVideo = false;
+                        }
+                    });
+                },
+                loadJitsiExternalApi(domain) {
+                    if (window.JitsiMeetExternalAPI) {
+                        return Promise.resolve();
+                    }
+
+                    if (!this._jitsiScriptPromise) {
+                        this._jitsiScriptPromise = new Promise((resolve, reject) => {
+                            const script = document.createElement('script');
+                            script.src = `https://${domain}/external_api.js`;
+                            script.async = true;
+                            script.onload = () => resolve();
+                            script.onerror = () => reject(new Error('Unable to load the video call client.'));
+                            document.head.appendChild(script);
+                        });
+                    }
+
+                    return this._jitsiScriptPromise;
+                },
+                startJitsiCall(joinData) {
+                    this.loadJitsiExternalApi(joinData.domain).then(() => {
+                        this.$nextTick(() => {
+                            const container = this.$refs.videoContainer;
+                            if (!container) return;
+
+                            this.jitsiApi = new window.JitsiMeetExternalAPI(joinData.domain, {
+                                roomName: joinData.room_name,
+                                jwt: joinData.jwt,
+                                parentNode: container,
+                                width: '100%',
+                                height: '100%',
+                                configOverwrite: {
+                                    prejoinPageEnabled: false
+                                },
+                                userInfo: {
+                                    displayName: joinData.display_name
+                                }
+                            });
+
+                            this.inVideoCall = true;
+
+                            this.jitsiApi.addListener('readyToClose', () => {
+                                this.leaveVideoCall();
+                            });
+                        });
+                    }).catch((error) => {
+                        Swal.fire('Unable to join', error.message || 'Unable to load the video call client.', 'error');
+                    });
+                },
+                leaveVideoCall() {
+                    if (this.jitsiApi) {
+                        this.jitsiApi.dispose();
+                        this.jitsiApi = null;
+                    }
+
+                    this.inVideoCall = false;
                 },
                 sendTypingState(isTyping) {
                     if (this.consultationStatus !== 'active') {
@@ -716,6 +957,14 @@
                                 this.consultationStatus = data.session_status || 'completed';
                                 this.consultationCompletedAt = data.completed_at || null;
                                 this.saveMessage = data.message || 'Consultation completed successfully.';
+
+                                // The consultation is no longer active: stale video UI state
+                                // must not survive the transition, even briefly before reload.
+                                this.videoActive = false;
+                                if (this.inVideoCall) {
+                                    this.leaveVideoCall();
+                                }
+
                                 this.handleDraftBlur();
                                 this.activeTab = 'assessment';
                                 window.location.reload();
