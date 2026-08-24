@@ -5,14 +5,24 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\View\View;
 
 class UserManagementController extends Controller
 {
+    private function authorizeAdmin(): void
+    {
+        if (Auth::user()->role !== 'admin') {
+            abort(403, 'Unauthorized access.');
+        }
+    }
+
     public function index(): View
     {
+        $this->authorizeAdmin();
+
         $users = User::orderBy('created_at', 'desc')->get();
 
         return view('admin.users.index', compact('users'));
@@ -20,11 +30,15 @@ class UserManagementController extends Controller
 
     public function create(): View
     {
+        $this->authorizeAdmin();
+
         return view('admin.users.create');
     }
 
     public function store(Request $request)
     {
+        $this->authorizeAdmin();
+
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
@@ -60,11 +74,15 @@ class UserManagementController extends Controller
 
     public function edit(User $user): View
     {
+        $this->authorizeAdmin();
+
         return view('admin.users.edit', compact('user'));
     }
 
     public function update(Request $request, User $user)
     {
+        $this->authorizeAdmin();
+
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
