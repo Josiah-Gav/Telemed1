@@ -499,6 +499,19 @@
                         <span>History</span>
                     </div>
                 </a>
+            @elseif(Auth::check() && Auth::user()->role === 'admin')
+                <a href="{{ route('dashboard') }}" class="flex-1 text-center py-2 {{ request()->routeIs('dashboard') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
+                    <div class="flex flex-col items-center text-sm">
+                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h4v11H3zM17 10h4v11h-4zM7 3h10v18H7z"/></svg>
+                        <span>Dashboard</span>
+                    </div>
+                </a>
+                <a href="{{ route('admin.users.index') }}" class="flex-1 text-center py-2 {{ request()->routeIs('admin.users.index') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
+                    <div class="flex flex-col items-center text-sm">
+                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 014 4V7h1.5a2.5 2.5 0 012.5 2.5v11a1 1 0 01-1 1H4a1 1 0 01-1-1v-11a2.5 2.5 0 012.5-2.5H8V8.354a4 4 0 014-4z"/></svg>
+                        <span>Users</span>
+                    </div>
+                </a>
             @else
                 <a href="{{ route('dashboard') }}" class="flex-1 text-center py-2 {{ request()->routeIs('dashboard') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
                     <div class="flex flex-col items-center text-sm">

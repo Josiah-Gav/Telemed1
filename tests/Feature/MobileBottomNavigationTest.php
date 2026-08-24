@@ -33,3 +33,14 @@ test('nurse mobile bottom nav is unchanged', function () {
     $response->assertSee(route('nurse.consultation_inbox', ['nurse' => $nurse]), false);
     $response->assertSee(route('nurse.consultation_history', ['nurse' => $nurse]), false);
 });
+
+test('admin mobile bottom nav links to user management, not the patient-only routes', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $response = $this->actingAs($admin)->get('/dashboard');
+
+    $response->assertOk();
+    $response->assertSee(route('admin.users.index'), false);
+    $response->assertDontSee(route('newconsultation'), false);
+    $response->assertDontSee(route('consultations.history'), false);
+});
