@@ -14,6 +14,17 @@ test('physician mobile bottom nav links to physician routes, not the patient-onl
     $response->assertDontSee(route('consultations.history'), false);
 });
 
+test('physician mobile bottom nav has full parity with the desktop sidebar', function () {
+    $physician = User::factory()->create(['role' => 'physician']);
+
+    $response = $this->actingAs($physician)->get('/dashboard');
+
+    $response->assertOk();
+    $response->assertSee(route('physician.follow_up_requests', ['physician' => $physician]), false);
+    $response->assertSee(route('physician.active_consultation', ['physician' => $physician]), false);
+    $response->assertSee(route('physician.scheduled_consultation', ['physician' => $physician]), false);
+});
+
 test('patient mobile bottom nav is unchanged', function () {
     $patient = User::factory()->create(['role' => 'patient']);
 
@@ -24,13 +35,14 @@ test('patient mobile bottom nav is unchanged', function () {
     $response->assertSee(route('consultations.history'), false);
 });
 
-test('nurse mobile bottom nav is unchanged', function () {
+test('nurse mobile bottom nav has full parity with the desktop sidebar', function () {
     $nurse = User::factory()->create(['role' => 'nurse']);
 
     $response = $this->actingAs($nurse)->get(route('nurse.dashboard', ['nurse' => $nurse]));
 
     $response->assertOk();
     $response->assertSee(route('nurse.consultation_inbox', ['nurse' => $nurse]), false);
+    $response->assertSee(route('nurse.follow_up_requests', ['nurse' => $nurse]), false);
     $response->assertSee(route('nurse.consultation_history', ['nurse' => $nurse]), false);
 });
 

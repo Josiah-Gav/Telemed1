@@ -21,8 +21,8 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans antialiased bg-[#f4f8f3] text-slate-800">
-        <div class="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(217,182,72,0.12),transparent_30%),linear-gradient(180deg,_#eff8f1_0%,_#f5f7f3_100%)]">
-            <div x-data="{ sidebarOpen: true }" class="flex min-h-screen flex-col lg:flex-row">
+        <div class="min-h-dvh bg-[radial-gradient(circle_at_top,_rgba(217,182,72,0.12),transparent_30%),linear-gradient(180deg,_#eff8f1_0%,_#f5f7f3_100%)]">
+            <div x-data="{ sidebarOpen: true }" class="flex min-h-dvh flex-col lg:flex-row">
                 @include('layouts.navigation')
 
                 <div class="min-w-0 flex-1 transition-all duration-300">
@@ -34,8 +34,21 @@
                                     {{ $header }}
                                 </div>
                                 @auth
-                                    <div class="flex-shrink-0">
+                                    <div class="flex-shrink-0 flex items-center gap-1">
                                         @include('layouts.notificationUI')
+
+                                        <form method="POST" action="{{ route('logout') }}" class="md:hidden">
+                                            @csrf
+                                            <button
+                                                type="submit"
+                                                class="inline-flex items-center justify-center rounded-full bg-red-600 p-2 text-white/90 transition hover:bg-red-700 hover:text-white"
+                                                aria-label="{{ __('Log Out') }}"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="h-6 w-6" aria-hidden="true">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l3 3m0 0-3 3m3-3H2.25" />
+                                                </svg>
+                                            </button>
+                                        </form>
                                     </div>
                                 @endauth
                             </div>

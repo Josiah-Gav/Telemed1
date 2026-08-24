@@ -3,7 +3,8 @@
     "allow": [
       "Bash(php artisan *)",
       "Bash(git checkout *)",
-      "Bash(mkdir -p tests/Feature/Admin)"
+      "Bash(mkdir -p tests/Feature/Admin)",
+      "Bash(python \"C:/Users/Josiah/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.13.0/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"university infirmary telemedicine healthcare institutional landing page\" --design-system --variance 4 --motion 3 --density 3 -p \"CLSU Telemedicine\" --persist --output-dir \"c:/xampp/htdocs/Telemed\")"
     ],
     "additionalDirectories": [
       "C:\\xampp\\htdocs\\Telemed\\tests\\Feature"
