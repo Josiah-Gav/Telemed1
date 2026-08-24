@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan *)",
+      "Bash(git checkout *)",
+      "Bash(mkdir -p tests/Feature/Admin)"
+    ],
+    "additionalDirectories": [
+      "C:\\xampp\\htdocs\\Telemed\\tests\\Feature"
+    ]
+  },
+  "enabledPlugins": {
+    "ponytail@ponytail": true,
+    "superpowers@superpowers-dev": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true
+  }
+}
