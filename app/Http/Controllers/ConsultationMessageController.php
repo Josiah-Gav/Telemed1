@@ -437,6 +437,15 @@ class ConsultationMessageController extends Controller
                 'is_online' => (bool) $peerIsOnline,
                 'last_seen_at' => $peerLastSeen,
             ],
+            'video' => [
+                // Deliberately just a boolean: no room_name, jwt, domain, or any other
+                // Jitsi identifier belongs on a passive polling endpoint. Those are only
+                // ever issued by the authorized POST /video/join request. Gated on
+                // consultation_status === 'active' as well as row existence, so a
+                // completed consultation reports false even if a stale open row exists.
+                'active' => $session->consultation_status === 'active'
+                    && $session->activeVideoSession()->exists(),
+            ],
         ]);
     }
 
