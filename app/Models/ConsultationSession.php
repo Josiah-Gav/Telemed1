@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 class ConsultationSession extends Model
@@ -75,6 +76,24 @@ class ConsultationSession extends Model
         return $this->belongsTo(FollowUpRequest::class, 'follow_up_request_id', 'id');
     }
 
+    /**
+     * Every video session ever opened for this consultation, newest first.
+     */
+    public function videoSessions(): HasMany
+    {
+        return $this->hasMany(ConsultationVideoSession::class, 'consultation_id', 'id')
+            ->orderByDesc('created_at');
+    }
+
+    /**
+     * The single video session that has not been ended yet, if any.
+     */
+    public function activeVideoSession(): HasOne
+    {
+        return $this->hasOne(ConsultationVideoSession::class, 'consultation_id', 'id')
+            ->whereNull('ended_at');
+    }
+
     public function hasMeaningfulAssessment(): bool
     {
         return $this->hasMeaningfulText($this->assessment, [
@@ -127,6 +146,6 @@ class ConsultationSession extends Model
             $placeholders
         );
 
-        return !in_array($normalizedValue, $normalizedPlaceholders, true);
+        return ! in_array($normalizedValue, $normalizedPlaceholders, true);
     }
 }

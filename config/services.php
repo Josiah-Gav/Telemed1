@@ -35,4 +35,28 @@ return [
         ],
     ],
 
+    /*
+    | Jitsi as a Service (JaaS / 8x8) — video consultations.
+    | JWTs are RS256-signed server-side; see https://developer.8x8.com/jaas/docs/api-keys-jwt
+    */
+    'jitsi' => [
+        'domain' => env('JITSI_DOMAIN', '8x8.vc'),
+
+        // The "vpaas-magic-cookie-..." tenant identifier. Becomes the JWT "sub" claim
+        // and prefixes the IFrame API room name as "{app_id}/{room_name}".
+        'app_id' => env('JITSI_APP_ID'),
+
+        // The API Key ID from the JaaS console. Becomes the JWT header "kid".
+        'api_key_id' => env('JITSI_API_KEY_ID'),
+
+        // The RSA private key is stored on a single .env line with literal \n escapes,
+        // so restore real newlines here or PEM parsing fails. This runs at config build
+        // time, which keeps it correct under config:cache.
+        'private_key' => str_replace('\n', "\n", (string) env('JITSI_PRIVATE_KEY')),
+
+        // Token lifetime in seconds. Tokens are minted per join request and never stored,
+        // so this only needs to outlast a single consultation.
+        'jwt_ttl' => 7200,
+    ],
+
 ];
