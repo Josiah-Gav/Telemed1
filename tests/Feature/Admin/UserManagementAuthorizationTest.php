@@ -61,15 +61,19 @@ test('admins can still list, create, and edit users', function () {
     $this->actingAs($admin)->get(route('admin.users.create'))->assertOk();
     $this->actingAs($admin)->get(route('admin.users.edit', $target))->assertOk();
 
+    // Staff are now provisioned by invitation: no password is submitted and the
+    // account is created inactive rather than active.
     $this->actingAs($admin)->post(route('admin.users.store'), [
         'first_name' => 'New',
         'last_name' => 'Staffer',
         'email' => 'new.staffer@example.com',
-        'password' => 'password123',
-        'password_confirmation' => 'password123',
         'role' => 'nurse',
-        'account_status' => 'active',
-    ])->assertRedirect(route('admin.users.index'));
+    ])->assertSessionHasNoErrors()->assertRedirect(route('admin.users.index'));
 
-    $this->assertDatabaseHas('users', ['email' => 'new.staffer@example.com', 'role' => 'nurse']);
+    $this->assertDatabaseHas('users', [
+        'email' => 'new.staffer@example.com',
+        'role' => 'nurse',
+        'account_status' => 'inactive',
+        'email_verified_at' => null,
+    ]);
 });
