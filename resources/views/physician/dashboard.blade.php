@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-green-900 leading-tight">
+        <h2 class="font-semibold text-xl text-white-900 leading-tight">
             {{ __('Dashboard') }}
         </h2>
     </x-slot>
@@ -9,7 +9,7 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="overflow-hidden rounded-3xl border border-brand-border bg-gradient-to-r from-brand-green-soft via-white to-brand-gold-soft shadow-sm">
                 <div class="p-6 text-brand-green-deep sm:p-8">
-                    <p class="text-xs font-bold uppercase tracking-[0.22em] text-brand-green">Physician Dashboard</p>
+                    <p class="text-xs font-bold uppercase text-brand-green">Physician Dashboard</p>
                     <h2 class="mt-2 text-2xl font-bold text-slate-900">
                         {{ __("Hello Doc ". Auth::user()->first_name ."!") }}
                     </h2>
@@ -20,7 +20,7 @@
                 <div class="overflow-hidden rounded-3xl border border-brand-border bg-white shadow-sm">
                     <div class="flex flex-col gap-4 border-b border-brand-border px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.22em] text-brand-green">Notifications</p>
+                            <p class="text-xs font-bold uppercase text-brand-green">Notifications</p>
                             <h3 class="mt-2 text-xl font-bold text-slate-900">Recent updates</h3>
                         </div>
                         <button type="button" @click="markAllRead()" class="inline-flex items-center justify-center rounded-full border border-brand-border bg-brand-green-soft px-3 py-2 text-sm font-semibold text-brand-green-deep hover:bg-brand-green hover:text-white transition">
