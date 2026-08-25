@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\Auth\StaffInvitationController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 
@@ -33,6 +34,16 @@ Route::middleware('guest')->group(function () {
 
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->name('password.store');
+
+    // Nurse/physician account activation. Deliberately outside the auth+verified
+    // group in routes/web.php: the invitee has no password and is not logged in.
+    Route::get('staff/activate/{token}', [StaffInvitationController::class, 'create'])
+        ->middleware('throttle:6,1')
+        ->name('staff.activate');
+
+    Route::post('staff/activate', [StaffInvitationController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('staff.activate.store');
 });
 
 Route::middleware('auth')->group(function () {

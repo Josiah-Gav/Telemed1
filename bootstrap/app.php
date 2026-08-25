@@ -21,5 +21,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Staff invitation and password reset links both submit their one-time
+        // secret as a 'token' field. Without this it is flashed back as old
+        // input on any validation failure, persisting the live token in the
+        // session. Joins the framework defaults rather than replacing them.
+        $exceptions->dontFlash(['token']);
     })->create();

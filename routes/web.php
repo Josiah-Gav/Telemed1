@@ -47,6 +47,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('admin.users.edit');
     Route::put('/admin/users/{user}', [\App\Http\Controllers\Admin\UserManagementController::class, 'update'])
         ->name('admin.users.update');
+    // Admin-only invitation recovery. Throttled to match the other authenticated
+    // POST endpoints in this file: generous enough to invite a batch of staff in
+    // one sitting, tight enough to bound mailbox spam if the session is misused.
+    Route::post('/admin/users/{user}/resend-invitation', [\App\Http\Controllers\Admin\UserManagementController::class, 'resendInvitation'])
+        ->middleware('throttle:30,1')
+        ->name('admin.users.resend_invitation');
 
     // 2. Safe placement for your new consultation page
     Route::get('/newconsultation', [DashboardController::class, 'newconsultation'])

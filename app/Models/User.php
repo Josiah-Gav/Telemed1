@@ -16,6 +16,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     // Tell Laravel it doesn't auto-increment a column named 'id'
     public $incrementing = true;
+
     protected $keyType = 'int';
 
     /**
@@ -60,16 +61,34 @@ class User extends Authenticatable implements MustVerifyEmail
         'last_seen_at' => 'datetime',
     ];
 
+    /**
+     * Roles that are provisioned by admin invitation rather than by
+     * self-registration or direct creation.
+     */
+    public const INVITED_ROLES = ['nurse', 'physician'];
+
+    /**
+     * Whether this account is a staff account still waiting to be activated
+     * through its invitation.
+     *
+     * Single source of truth for that rule: activation (StaffInvitationController)
+     * and invitation resend (Admin\UserManagementController) must agree, or the
+     * admin could issue an invitation that the activation flow then refuses.
+     */
+    public function awaitsStaffActivation(): bool
+    {
+        return $this->account_status === 'inactive'
+            && in_array($this->role, self::INVITED_ROLES, true);
+    }
+
     protected static function booted(): void
     {
+        // Admins are provisioned directly (no self-registration, no invitation flow),
+        // so they would otherwise be locked out by the 'verified' middleware.
+        // Nurses and physicians are deliberately excluded: they verify by accepting
+        // their activation invitation.
         static::creating(function (self $user): void {
-            if (empty($user->email_verified_at) && in_array($user->role, ['admin', 'nurse', 'physician'], true)) {
-                $user->email_verified_at = now();
-            }
-        });
-
-        static::saving(function (self $user): void {
-            if (empty($user->email_verified_at) && in_array($user->role, ['admin', 'nurse', 'physician'], true)) {
+            if (empty($user->email_verified_at) && $user->role === 'admin') {
                 $user->email_verified_at = now();
             }
         });

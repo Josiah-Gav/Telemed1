@@ -17,12 +17,12 @@ This is a Laravel 12 telemedicine application ("Telemed"). It manages the full l
 - Run a single test by name: `vendor/bin/pest --filter="test description or Pest it() name"`
 - Lint/format PHP: `vendor/bin/pint` (Laravel Pint; run `vendor/bin/pint --dirty` to format only changed files)
 - Tinker/REPL: `php artisan tinker`
-- Migrate: `php artisan migrate` (SQLite DB at `database/database.sqlite`); Feature tests use an in-memory SQLite DB (`phpunit.xml`) via Pest's `RefreshDatabase` (`tests/Pest.php` applies it only `->in('Feature')`), so they never touch the dev database.
+- Migrate: `php artisan migrate`. **Local dev and production both run MySQL/MariaDB** (`DB_CONNECTION=mysql`, database `telemed` under XAMPP) — the `database/database.sqlite` file is a leftover and is not the dev database. Feature tests use an in-memory SQLite DB (`phpunit.xml`) via Pest's `RefreshDatabase` (`tests/Pest.php` applies it only `->in('Feature')`), so they never touch the dev database. This split matters: tests and dev run different engines, so driver-specific behaviour can pass in tests and differ in dev (see the two gotchas below).
 - Cron-driven housekeeping: `php artisan consultations:mark-missed-slots` (registered in `routes/console.php` to run `everyMinute`) — flips booked `schedule_slots` to `missed` once their end time passes without the consultation starting. This only actually fires if something invokes the Laravel scheduler periodically (`schedule:run` via OS cron, or `schedule:work` locally) — registering the command alone does not make it run.
 
 ### Gotcha: SQLite enum migrations are no-ops
 
-`alter_consultations_status_enum.php` and `alter_status_enum_on_schedule_slots_table.php` both intentionally `return` early when `DB::getDriverName() === 'sqlite'`. Since local dev (`database/database.sqlite`) and tests (`:memory:`) both run on SQLite, these migrations never execute there — the extra enum values they add (`scheduled` for `consultations.consultation_status`; `missed`/`completed` for `schedule_slots.status`) are never enforced by a SQLite constraint, only by application code. MySQL is the target driver where these ALTER migrations actually matter. Don't assume the enum migrations reflect what SQLite will accept, and don't be surprised that inserting these newer status values works fine locally despite the migration being a no-op there.
+`alter_consultations_status_enum.php` and `alter_status_enum_on_schedule_slots_table.php` both intentionally `return` early when `DB::getDriverName() === 'sqlite'`. Dev runs MySQL, so these migrations **do** execute there and the enum values are enforced; it is only the test database (`:memory:` SQLite) where they never execute — the extra enum values they add (`scheduled` for `consultations.consultation_status`; `missed`/`completed` for `schedule_slots.status`) are never enforced by a SQLite constraint, only by application code. MySQL is the target driver where these ALTER migrations actually matter. Don't assume the enum migrations reflect what SQLite will accept: a status value the tests happily insert can still be rejected by the MySQL enum in dev and production.
 
 ## Architecture
 
@@ -51,6 +51,53 @@ Almost every model overrides Eloquent defaults — check before assuming `id`:
 ### Role-based routing
 
 All authenticated routes live in `routes/web.php` inside an `auth`+`verified` middleware group. `DashboardController::index` branches on `$user->role` to route to the right dashboard view (nurse role redirects to `nurse.dashboard`). Nurse and physician routes are scoped under `nurses/{nurse}/...` and `physicians/{physician}/...` prefixes with the acting user's own ID as a route parameter. `NurseController` and `PhysicianController` each guard every action with a private `authorizeNurse(User $nurse)` / `authorizePhysician(User $physician)` method that checks both `Auth::user()->role` and that `Auth::id()` matches the route-bound user's `user_id` — never trust the route parameter alone; follow this same pattern for new nurse/physician actions. Controllers are role-specific: `NurseController`, `PhysicianController` own their dashboards, inboxes, and consultation-history views; `ConsultationController` and `ConsultationMessageController` handle the shared patient/physician-facing consultation and in-session messaging flows.
+
+### Staff account invitations (nurse/physician provisioning)
+
+Nurses and physicians do not self-register and are never given a password by an
+admin. `Admin\UserManagementController::store` creates them `account_status =
+inactive` with `email_verified_at = null` and a discarded random filler password
+(the column is `NOT NULL`), then issues an invitation and emails it. The invitee
+sets their own password through the activation link, which is what flips the
+account to `active` and verified.
+
+Invitations are **Laravel's password broker**, not a bespoke token system — a
+second broker named `staff_invitations` in `config/auth.php`, backed by
+`staff_invitation_tokens`, expiring in 7 days (`expire => 10080`). Keep it that
+way; do not add an invitations table or a custom token. The schema is exactly
+`email`/`token`/`created_at` because `DatabaseTokenRepository::getPayload()`
+inserts exactly those three columns — an extra `NOT NULL` column breaks the
+insert, which is why the table has no `user_id` and why invitations are
+email-keyed.
+
+Invariants that must not be broken:
+
+- **The plaintext token exists only in memory.** `createToken()` returns it, it
+  goes straight into `StaffAccountInvitation`, and into the activation URL. It is
+  never stored, logged, flashed (`bootstrap/app.php` adds `token` to
+  `dontFlash`), or queued.
+- **`StaffAccountInvitation` must stay synchronous.** `QUEUE_CONNECTION=database`,
+  so queuing it would serialize the plaintext token into `jobs.payload`. A test
+  asserts it does not implement `ShouldQueue`.
+- **Mail is sent after the transaction commits, never inside it,** and a transport
+  failure is caught so a committed account is not lost behind a 500. The catch is
+  deliberately `Throwable`. Only the exception class is logged; the message can
+  carry the SMTP username.
+- **Eligibility is `User::awaitsStaffActivation()`** (inactive + nurse/physician),
+  the single source of truth shared by activation and resend. Changing one
+  without the other lets an admin issue invitations the activation flow refuses.
+- **Changing a pending invitee's email must revoke their invitation first**, while
+  the model still holds the old address — `update()` does this. Otherwise the old
+  link stays redeemable against whoever is assigned that address next.
+- **Resend locks the user row and re-checks eligibility under the lock.**
+  `createToken()` deletes the previous row before inserting, so exactly one
+  invitation is ever valid.
+- Expired rows are flushed by `auth:clear-resets staff_invitations` on the
+  scheduler. The broker name is required — omitting it would target
+  `password_reset_tokens` instead.
+
+Password reset is a **separate broker** at 60 minutes and must stay isolated:
+neither token type works in the other flow, and tests assert this.
 
 ### Notifications
 

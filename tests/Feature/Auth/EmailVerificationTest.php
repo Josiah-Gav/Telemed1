@@ -45,11 +45,29 @@ test('email is not verified with invalid hash', function () {
     expect($user->fresh()->hasVerifiedEmail())->toBeFalse();
 });
 
-test('staff roles are verified immediately when created', function () {
-    $nurse = User::factory()->create([
-        'role' => 'nurse',
+test('admins are verified immediately when created', function () {
+    $admin = User::factory()->create([
+        'role' => 'admin',
         'email_verified_at' => null,
     ]);
 
-    expect($nurse->fresh()->hasVerifiedEmail())->toBeTrue();
+    expect($admin->fresh()->hasVerifiedEmail())->toBeTrue();
+});
+
+test('nurses and physicians are not verified when created', function (string $role) {
+    $user = User::factory()->create([
+        'role' => $role,
+        'email_verified_at' => null,
+    ]);
+
+    expect($user->fresh()->hasVerifiedEmail())->toBeFalse();
+})->with(['nurse', 'physician']);
+
+test('clearing a staff email verification is not silently undone on save', function () {
+    $nurse = User::factory()->create(['role' => 'nurse']);
+
+    $nurse->email_verified_at = null;
+    $nurse->save();
+
+    expect($nurse->fresh()->hasVerifiedEmail())->toBeFalse();
 });
