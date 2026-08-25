@@ -99,6 +99,16 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
+
+        // Invitation links for admin-provisioned nurse and physician accounts.
+        // A separate broker is required because the expiry is per-broker: sharing
+        // the 'users' broker would stretch every password reset to 7 days too.
+        'staff_invitations' => [
+            'provider' => 'users',
+            'table' => 'staff_invitation_tokens',
+            'expire' => 10080,
+            'throttle' => 0,
+        ],
     ],
 
     /*
