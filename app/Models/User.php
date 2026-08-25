@@ -16,6 +16,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     // Tell Laravel it doesn't auto-increment a column named 'id'
     public $incrementing = true;
+
     protected $keyType = 'int';
 
     /**
@@ -59,6 +60,26 @@ class User extends Authenticatable implements MustVerifyEmail
         'password' => 'hashed',
         'last_seen_at' => 'datetime',
     ];
+
+    /**
+     * Roles that are provisioned by admin invitation rather than by
+     * self-registration or direct creation.
+     */
+    public const INVITED_ROLES = ['nurse', 'physician'];
+
+    /**
+     * Whether this account is a staff account still waiting to be activated
+     * through its invitation.
+     *
+     * Single source of truth for that rule: activation (StaffInvitationController)
+     * and invitation resend (Admin\UserManagementController) must agree, or the
+     * admin could issue an invitation that the activation flow then refuses.
+     */
+    public function awaitsStaffActivation(): bool
+    {
+        return $this->account_status === 'inactive'
+            && in_array($this->role, self::INVITED_ROLES, true);
+    }
 
     protected static function booted(): void
     {

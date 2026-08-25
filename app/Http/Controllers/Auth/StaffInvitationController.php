@@ -25,12 +25,6 @@ use Illuminate\View\View;
 class StaffInvitationController extends Controller
 {
     /**
-     * Roles that are provisioned by invitation. Patients self-register and
-     * admins are provisioned directly, so neither may use this flow.
-     */
-    private const INVITED_ROLES = ['nurse', 'physician'];
-
-    /**
      * Every rejection returns this same message. Distinguishing "no such
      * account" from "already active" would turn the endpoint into an
      * account-status oracle.
@@ -122,8 +116,7 @@ class StaffInvitationController extends Controller
      */
     private function isEligible(User $user): bool
     {
-        return $user->account_status === 'inactive'
-            && in_array($user->role, self::INVITED_ROLES, true);
+        return $user->awaitsStaffActivation();
     }
 
     /**

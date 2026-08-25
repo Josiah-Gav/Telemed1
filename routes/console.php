@@ -11,3 +11,13 @@ Artisan::command('inspire', function () {
 Schedule::command('consultations:mark-missed-slots')
     ->everyMinute()
     ->withoutOverlapping();
+
+// Flush staff invitation tokens that have passed their 7-day expiry, so dead
+// credential material does not accumulate. Laravel's own command, named
+// explicitly so it targets the staff_invitations broker and never touches
+// password_reset_tokens. deleteExpired() removes rows where
+// created_at < now() - expire, which is the same boundary tokenExpired() uses,
+// so it can only ever delete a token that is already unusable.
+Schedule::command('auth:clear-resets staff_invitations')
+    ->daily()
+    ->withoutOverlapping();

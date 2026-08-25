@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Notifications\StaffAccountInvitation;
+use Illuminate\Contracts\Auth\PasswordBroker;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -38,7 +41,46 @@ class UserManagementController extends Controller
 
         $users = User::orderBy('created_at', 'desc')->get();
 
-        return view('admin.users.index', compact('users'));
+        return view('admin.users.index', [
+            'users' => $users,
+            'invitations' => $this->invitationStates($users),
+        ]);
+    }
+
+    /**
+     * Derive each account's invitation state for the listing.
+     *
+     * Read from the user record and staff_invitation_tokens.created_at, never
+     * from a stored status column: a column would be a second source of truth
+     * able to drift from the tokens the activation flow actually honours.
+     *
+     * @param  Collection<int, User>  $users
+     * @return Collection<int, array{state: string, label: string}|null>
+     */
+    private function invitationStates($users)
+    {
+        // One query for every outstanding invitation rather than one per row.
+        $issuedAt = DB::table('staff_invitation_tokens')->pluck('created_at', 'email');
+        $lifetime = (int) config('auth.passwords.staff_invitations.expire');
+
+        return $users->mapWithKeys(function (User $user) use ($issuedAt, $lifetime): array {
+            if (! $user->awaitsStaffActivation()) {
+                return [$user->user_id => null];
+            }
+
+            $created = $issuedAt[$user->email] ?? null;
+
+            if ($created === null) {
+                return [$user->user_id => ['state' => 'missing', 'label' => 'Not sent']];
+            }
+
+            $expiresAt = Carbon::parse($created)->addMinutes($lifetime);
+
+            return [$user->user_id => $expiresAt->isPast()
+                ? ['state' => 'expired', 'label' => 'Expired']
+                : ['state' => 'pending', 'label' => 'Expires '.$expiresAt->diffForHumans()],
+            ];
+        });
     }
 
     public function create(): View
@@ -157,6 +199,88 @@ class UserManagementController extends Controller
             'status',
             'Staff account created and invitation email sent. The invitation is valid for 7 days.'
         );
+    }
+
+    /**
+     * Issue a fresh invitation for a staff account that has not activated yet.
+     *
+     * Recovers every dead end the invitation flow can reach: an expired link, a
+     * failed first email, a link the staff member lost, and an invitation this
+     * controller revoked when an admin corrected the address.
+     */
+    public function resendInvitation(User $user)
+    {
+        $this->authorizeAdmin();
+
+        // Judged on the stored record only. Nothing about the target comes from
+        // the request body: the user is resolved by route model binding, and
+        // role and status are read from the row.
+        if (! $user->awaitsStaffActivation()) {
+            return Redirect::route('admin.users.index')->with(
+                'warning',
+                'That account is not awaiting activation, so no invitation was sent.'
+            );
+        }
+
+        // A token issued moments ago means a double-click or a duplicate submit.
+        // Issuing another would send a second email and silently kill the link
+        // in the first, which is the more confusing outcome.
+        if ($this->broker()->getRepository()->recentlyCreatedToken($user)) {
+            return Redirect::route('admin.users.index')->with(
+                'warning',
+                'An invitation was already sent to '.$user->email.' moments ago. Please wait a minute before sending another.'
+            );
+        }
+
+        // createToken() deletes any existing row for this address before
+        // inserting, so rotation is atomic within the repository and there is
+        // never a moment when two invitations are valid. The row is locked so
+        // two admins resending at once serialize rather than racing the
+        // delete/insert pair against each other.
+        $invitationToken = DB::transaction(function () use ($user): ?string {
+            $locked = User::where('user_id', $user->user_id)->lockForUpdate()->first();
+
+            // Re-checked under the lock: the account may have been activated or
+            // suspended between the check above and acquiring the row.
+            if (! $locked instanceof User || ! $locked->awaitsStaffActivation()) {
+                return null;
+            }
+
+            return $this->broker()->createToken($locked);
+        });
+
+        if ($invitationToken === null) {
+            return Redirect::route('admin.users.index')->with(
+                'warning',
+                'That account is not awaiting activation, so no invitation was sent.'
+            );
+        }
+
+        // After the commit, exactly as in store(): a transport failure must not
+        // discard an invitation that is already valid and usable.
+        try {
+            $user->notify(new StaffAccountInvitation($user, $invitationToken));
+        } catch (Throwable $exception) {
+            Log::error('Staff invitation email could not be resent.', [
+                'user_id' => $user->user_id,
+                'exception' => $exception::class,
+            ]);
+
+            return Redirect::route('admin.users.index')->with(
+                'warning',
+                'Account remains inactive, but the invitation email could not be sent.'
+            );
+        }
+
+        return Redirect::route('admin.users.index')->with(
+            'status',
+            'Invitation email sent to '.$user->email.'.'
+        );
+    }
+
+    private function broker(): PasswordBroker
+    {
+        return Password::broker('staff_invitations');
     }
 
     public function edit(User $user): View

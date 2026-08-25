@@ -34,6 +34,7 @@
                                     <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Email</th>
                                     <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Role</th>
                                     <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Status</th>
+                                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Invitation</th>
                                     <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Action</th>
                                 </tr>
                             </thead>
@@ -44,8 +45,33 @@
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ $user->email }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ ucfirst($user->role) }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ ucfirst($user->account_status) }}</td>
+                                        @php($invitation = $invitations[$user->user_id] ?? null)
                                         <td class="px-4 py-3 text-sm">
-                                            <a href="{{ route('admin.users.edit', $user) }}" class="text-brand-green hover:underline">Edit</a>
+                                            @if($invitation)
+                                                <span @class([
+                                                    'inline-block rounded-full px-2 py-0.5 text-xs font-medium',
+                                                    'bg-emerald-50 text-emerald-800' => $invitation['state'] === 'pending',
+                                                    'bg-amber-50 text-amber-800' => $invitation['state'] === 'expired',
+                                                    'bg-gray-100 text-gray-700' => $invitation['state'] === 'missing',
+                                                ])>{{ $invitation['label'] }}</span>
+                                            @else
+                                                <span class="text-gray-400">&mdash;</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-4 py-3 text-sm">
+                                            <div class="flex items-center gap-3">
+                                                <a href="{{ route('admin.users.edit', $user) }}" class="text-brand-green hover:underline">Edit</a>
+
+                                                {{-- Offered only for accounts the activation flow would actually accept. --}}
+                                                @if($invitation)
+                                                    <form method="POST" action="{{ route('admin.users.resend_invitation', $user) }}">
+                                                        @csrf
+                                                        <button type="submit" class="text-brand-green hover:underline">
+                                                            {{ $invitation['state'] === 'missing' ? 'Send Invitation' : 'Resend Invitation' }}
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
                                         </td>
                                     </tr>
                                 @endforeach

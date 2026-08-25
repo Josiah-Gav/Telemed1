@@ -107,7 +107,13 @@ return [
             'provider' => 'users',
             'table' => 'staff_invitation_tokens',
             'expire' => 10080,
-            'throttle' => 0,
+            // Guards resend against double-clicks: the repository reports a
+            // token created within this window as "recently created", so a
+            // second request seconds later is refused instead of issuing a
+            // second link and a second email. Keyed by the invitee's address,
+            // so it never blocks an admin inviting different people in a row.
+            // createToken() ignores this, leaving account creation unaffected.
+            'throttle' => 60,
         ],
     ],
 
