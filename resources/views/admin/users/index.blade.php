@@ -9,6 +9,18 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
+                    @if(session('status'))
+                        <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                            {{ session('status') }}
+                        </div>
+                    @endif
+
+                    @if(session('warning'))
+                        <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                            {{ session('warning') }}
+                        </div>
+                    @endif
+
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-semibold">Users</h3>
                         <a href="{{ route('admin.users.create') }}" class="rounded-md bg-brand-green px-4 py-2 text-sm font-medium text-white hover:bg-brand-green-deep">Create User</a>

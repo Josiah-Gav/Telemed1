@@ -38,6 +38,7 @@ Route::middleware('guest')->group(function () {
     // Nurse/physician account activation. Deliberately outside the auth+verified
     // group in routes/web.php: the invitee has no password and is not logged in.
     Route::get('staff/activate/{token}', [StaffInvitationController::class, 'create'])
+        ->middleware('throttle:6,1')
         ->name('staff.activate');
 
     Route::post('staff/activate', [StaffInvitationController::class, 'store'])

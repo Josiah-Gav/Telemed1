@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Auth;
 
-use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -43,19 +42,26 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        $user = User::where('email', $this->input('email'))->first();
-
-        if ($user && $user->account_status !== 'active') {
-            throw ValidationException::withMessages([
-                'email' => 'This account is inactive.',
-            ]);
-        }
-
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),
+            ]);
+        }
+
+        // Account status is only disclosed once the credentials have proven the
+        // requester owns the account. Checking it first let anyone discover
+        // which addresses belong to non-active accounts — pending staff
+        // invitations among them — and, because it returned before the limiter
+        // was hit, probe for them without limit.
+        if (Auth::user()->account_status !== 'active') {
+            Auth::guard('web')->logout();
+
+            RateLimiter::hit($this->throttleKey());
+
+            throw ValidationException::withMessages([
+                'email' => 'This account is inactive.',
             ]);
         }
 
