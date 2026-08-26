@@ -6,10 +6,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Consultation;
 use App\Models\FollowUpRequest;
+use App\Services\DashboardAnalyticsService;
+use App\Support\DateRange;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function __construct(private readonly DashboardAnalyticsService $analyticsService)
+    {
+    }
+
+    public function index(Request $request)
     {
         $user = Auth::user();
 
@@ -25,11 +31,40 @@ class DashboardController extends Controller
 
                 return view('patient.dashboard', compact('patientInfo', 'activeConsultation', 'activeConsultationSummary', 'followUpStatus', 'physicianFollowUp'));
             case 'physician':
-                return view('physician.dashboard');
+                // Physicians land here on first login/verification (Breeze's
+                // redirect()->intended(route('dashboard')) — see
+                // AuthenticatedSessionController) even though normal
+                // navigation always links to physician.dashboard directly.
+                // Both paths must carry the same analytics, so this mirrors
+                // PhysicianController::dashboard() rather than redirecting —
+                // a redirect would change the response from 200 to 302 and
+                // break MobileBottomNavigationTest's existing assertions
+                // that GET /dashboard renders physician nav content directly.
+                $physicianDateRange = DateRange::fromInput(
+                    $request->query('range'),
+                    $request->query('start'),
+                    $request->query('end'),
+                    'this_month',
+                );
+
+                return view('physician.dashboard', [
+                    'analytics' => $this->analyticsService->forPhysician($user, $physicianDateRange),
+                    'dateRange' => $physicianDateRange,
+                ]);
             case 'nurse':
                 return redirect()->route('nurse.dashboard', ['nurse' => $user]);
             case 'admin':
-                return view('admin.dashboard');
+                $dateRange = DateRange::fromInput(
+                    $request->query('range'),
+                    $request->query('start'),
+                    $request->query('end'),
+                    'last_30_days',
+                );
+
+                return view('admin.dashboard', [
+                    'analytics' => $this->analyticsService->forAdmin($dateRange),
+                    'dateRange' => $dateRange,
+                ]);
             default:
                 abort(403, 'Unauthorized action. Role not recognized.');
         }

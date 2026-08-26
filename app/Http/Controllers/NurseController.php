@@ -9,12 +9,16 @@ use App\Models\FollowUpRequest;
 use App\Models\User;
 use App\Enums\NotificationType;
 use App\Services\ConsultationOwnershipService;
+use App\Services\DashboardAnalyticsService;
 use App\Services\NotificationService;
+use App\Support\DateRange;
 
 class NurseController extends Controller
 {
-    public function __construct(private readonly ConsultationOwnershipService $ownershipService)
-    {
+    public function __construct(
+        private readonly ConsultationOwnershipService $ownershipService,
+        private readonly DashboardAnalyticsService $analyticsService,
+    ) {
         $this->middleware('auth');
     }
 
@@ -26,12 +30,21 @@ class NurseController extends Controller
         }
     }
 
-    public function dashboard(User $nurse)
+    public function dashboard(User $nurse, Request $request)
     {
         $this->authorizeNurse($nurse);
 
+        $dateRange = DateRange::fromInput(
+            $request->query('range'),
+            $request->query('start'),
+            $request->query('end'),
+            'last_30_days',
+        );
+
         return view('nurse.dashboard', [
             'nurse' => $nurse,
+            'analytics' => $this->analyticsService->forNurse($nurse, $dateRange),
+            'dateRange' => $dateRange,
         ]);
     }
 

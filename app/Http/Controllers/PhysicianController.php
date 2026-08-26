@@ -18,12 +18,16 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use App\Enums\NotificationType;
 use App\Services\ConsultationOwnershipService;
+use App\Services\DashboardAnalyticsService;
 use App\Services\NotificationService;
+use App\Support\DateRange;
 
 class PhysicianController extends Controller
 {
-    public function __construct(private readonly ConsultationOwnershipService $ownershipService)
-    {
+    public function __construct(
+        private readonly ConsultationOwnershipService $ownershipService,
+        private readonly DashboardAnalyticsService $analyticsService,
+    ) {
         $this->middleware('auth');
     }
 
@@ -34,11 +38,21 @@ class PhysicianController extends Controller
         }
     }
 
-    public function dashboard(User $physician)
+    public function dashboard(User $physician, Request $request)
     {
         $this->authorizePhysician($physician);
 
-        return view('physician.dashboard');
+        $dateRange = DateRange::fromInput(
+            $request->query('range'),
+            $request->query('start'),
+            $request->query('end'),
+            'this_month',
+        );
+
+        return view('physician.dashboard', [
+            'analytics' => $this->analyticsService->forPhysician($physician, $dateRange),
+            'dateRange' => $dateRange,
+        ]);
     }
     
     public function consultationInbox(User $physician)

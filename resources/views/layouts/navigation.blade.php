@@ -1,5 +1,5 @@
 <nav :class="sidebarOpen ? 'lg:w-72' : 'lg:w-20'" class="lg:flex-shrink-0">
-    <aside :class="sidebarOpen ? 'w-72' : 'w-20 sidebar-collapsed'" class="hidden md:flex h-screen flex-col border-r border-brand-border bg-white/90 shadow-[0_0_0_1px_rgba(15,23,42,0.04)] backdrop-blur-sm lg:flex fixed lg:relative z-40 transition-all duration-300">
+    <aside :class="sidebarOpen ? 'w-72' : 'w-20 sidebar-collapsed'" class="hidden md:flex h-screen flex-col border-r border-brand-border bg-white/90 shadow-[0_0_0_1px_rgba(15,23,42,0.04)] backdrop-blur-sm lg:flex fixed lg:sticky lg:top-0 z-40 transition-all duration-300">
         <div :class="sidebarOpen ? 'px-5' : 'px-2'" class="flex items-center gap-3 border-b border-brand-border bg-brand-green py-4">
             <a :class="sidebarOpen ? 'justify-start' : 'justify-center'" href="{{ Auth::check() && Auth::user()->role === 'nurse' ? route('nurse.dashboard', ['nurse' => Auth::user()]) : route('dashboard') }}" class="flex w-full items-center gap-3">
                 <x-application-logo class="block h-8 w-auto fill-current text-white flex-shrink-0" />
@@ -299,233 +299,80 @@
             };
         }
 
-        function dashboardNotifications() {
-            return {
-                loading: false,
-                notifList: [],
-                unreadCount: 0,
-                poller: null,
-                csrf: document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                userId: {{ (int) auth()->id() }},
-                role: @js(auth()->user()->role),
-                routes: {
-                    index: '{{ route('notifications.index') }}',
-                    unread: '{{ route('notifications.unread_count') }}',
-                    readAll: '{{ route('notifications.read_all') }}'
-                },
-                init() {
-                    this.fetchUnreadCount();
-                    this.fetchNotifications();
-                    this.poller = setInterval(() => {
-                        this.fetchUnreadCount();
-                        this.fetchNotifications();
-                    }, 30000);
-                },
-                fetchUnreadCount() {
-                    $.ajax({
-                        url: this.routes.unread,
-                        method: 'GET',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        success: (data) => {
-                            this.unreadCount = data?.data?.unread_count ?? 0;
-                        }
-                    });
-                },
-                fetchNotifications() {
-                    this.loading = true;
-                    $.ajax({
-                        url: this.routes.index,
-                        method: 'GET',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        success: (data) => {
-                            this.notifList = data?.data ?? [];
-                        },
-                        complete: () => {
-                            this.loading = false;
-                        }
-                    });
-                },
-                markAsRead(n) {
-                    if (n.read_at) {
-                        this.navigate(n);
-                        return;
-                    }
-
-                    const url = this.routes.index + '/' + n.notification_id + '/read';
-
-                    $.ajax({
-                        url: url,
-                        method: 'PATCH',
-                        headers: {
-                            'X-CSRF-TOKEN': this.csrf,
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'application/json'
-                        },
-                        success: () => {
-                            n.read_at = new Date().toISOString();
-                            this.unreadCount = Math.max(0, this.unreadCount - 1);
-                            this.navigate(n);
-                        },
-                        error: () => {
-                            this.navigate(n);
-                        }
-                    });
-                },
-                markAllRead() {
-                    $.ajax({
-                        url: this.routes.readAll,
-                        method: 'PATCH',
-                        headers: {
-                            'X-CSRF-TOKEN': this.csrf,
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'application/json'
-                        },
-                        success: () => {
-                            this.notifList.forEach(n => {
-                                if (!n.read_at) {
-                                    n.read_at = new Date().toISOString();
-                                }
-                            });
-                            this.unreadCount = 0;
-                        }
-                    });
-                },
-                navigate(n) {
-                    const d = n.data || {};
-                    const id = this.userId;
-                    let url = '{{ route('dashboard') }}';
-
-                    switch (n.type) {
-                        case 'new_message':
-                        case 'new_attachment':
-                            if (d.session_id) {
-                                url = '{{ url('consultation-sessions') }}' + '/' + d.session_id + '/messaging';
-                            }
-                            break;
-                        case 'consultation_scheduled':
-                        case 'consultation_rescheduled':
-                        case 'consultation_started':
-                        case 'consultation_completed':
-                        case 'consultation_missed':
-                            if (this.role === 'patient' && d.request_id) {
-                                url = '{{ url('consultations') }}' + '/' + d.request_id;
-                            } else if (this.role === 'physician') {
-                                url = '{{ url('physicians') }}' + '/' + id + '/consultation-inbox';
-                            }
-                            break;
-                        case 'consultation_submitted':
-                            url = '{{ url('nurses') }}' + '/' + id + '/consultation-inbox';
-                            break;
-                        case 'consultation_assigned':
-                        case 'high_priority_consultation':
-                            url = '{{ url('physicians') }}' + '/' + id + '/consultation-inbox';
-                            break;
-                        case 'follow_up_submitted':
-                            if (this.role === 'nurse') {
-                                url = '{{ url('nurses') }}' + '/' + id + '/follow-up-requests';
-                            } else if (this.role === 'physician') {
-                                url = '{{ url('physicians') }}' + '/' + id + '/follow-up-requests';
-                            }
-                            break;
-                        case 'follow_up_approved':
-                        case 'follow_up_rejected':
-                        case 'follow_up_scheduled':
-                        case 'follow_up_starting_soon':
-                        case 'physician_request':
-                            if (this.role === 'patient') {
-                                url = '{{ route('patient.follow_up_list') }}';
-                            }
-                            break;
-                    }
-
-                    window.location.href = url;
-                },
-                formatTime(iso) {
-                    if (!iso) return '';
-                    const date = new Date(iso);
-                    if (Number.isNaN(date.getTime())) return '';
-                    const diff = (Date.now() - date.getTime()) / 1000;
-                    if (diff < 60) return 'Just now';
-                    if (diff < 3600) return Math.floor(diff / 60) + ' minutes ago';
-                    if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
-                    if (diff < 604800) return Math.floor(diff / 86400) + ' days ago';
-                    return date.toLocaleDateString();
-                }
-            };
-        }
-
         window.notificationPanel = notificationPanel;
-        window.dashboardNotifications = dashboardNotifications;
     </script>
 
-    <!-- Mobile bottom navigation (visible only on small screens) -->
-    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 sm:hidden z-40">
-        <div class="max-w-7xl mx-auto px-4 py-2 flex justify-between items-center">
-            @if(Auth::check() && Auth::user()->role === 'nurse')
-                <a href="{{ route('nurse.dashboard', ['nurse' => Auth::user()]) }}" class="flex-1 text-center py-2 {{ request()->routeIs('nurse.dashboard') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                    <div class="flex flex-col items-center text-sm">
-                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v4a1 1 0 001 1h3m10 0h3a1 1 0 001-1V7M16 3v4M8 3v4"/></svg>
-                        <span>Dashboard</span>
-                    </div>
-                </a>
-                <a href="{{ route('nurse.consultation_inbox', ['nurse' => Auth::user()]) }}" class="flex-1 text-center py-2 {{ request()->routeIs('nurse.consultation_inbox') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                    <div class="flex flex-col items-center text-sm">
-                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z"/></svg>
-                        <span>Inbox</span>
-                    </div>
-                </a>
-                <a href="{{ route('nurse.consultation_history', ['nurse' => Auth::user()]) }}" class="flex-1 text-center py-2 {{ request()->routeIs('nurse.consultation_history') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                    <div class="flex flex-col items-center text-sm">
-                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"/></svg>
-                        <span>History</span>
-                    </div>
-                </a>
-            @elseif(Auth::check() && Auth::user()->role === 'physician')
-                <a href="{{ route('physician.dashboard', ['physician' => Auth::user()]) }}" class="flex-1 text-center py-2 {{ request()->routeIs('physician.dashboard') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                    <div class="flex flex-col items-center text-sm">
-                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v4a1 1 0 001 1h3m10 0h3a1 1 0 001-1V7M16 3v4M8 3v4"/></svg>
-                        <span>Dashboard</span>
-                    </div>
-                </a>
-                <a href="{{ route('physician.consultation_inbox', ['physician' => Auth::user()]) }}" class="flex-1 text-center py-2 {{ request()->routeIs('physician.consultation_inbox') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                    <div class="flex flex-col items-center text-sm">
-                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z"/></svg>
-                        <span>Inbox</span>
-                    </div>
-                </a>
-                <a href="{{ route('physician.consultation_history', ['physician' => Auth::user()]) }}" class="flex-1 text-center py-2 {{ request()->routeIs('physician.consultation_history') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                    <div class="flex flex-col items-center text-sm">
-                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"/></svg>
-                        <span>History</span>
-                    </div>
-                </a>
-            @else
-                <a href="{{ route('dashboard') }}" class="flex-1 text-center py-2 {{ request()->routeIs('dashboard') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                    <div class="flex flex-col items-center text-sm">
-                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h4v11H3zM17 10h4v11h-4zM7 3h10v18H7z"/></svg>
-                        <span>Dashboard</span>
-                    </div>
-                </a>
-                <a href="{{ route('newconsultation') }}" class="flex-1 text-center py-2 {{ request()->routeIs('newconsultation') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                    <div class="flex flex-col items-center text-sm">
-                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                        <span>New</span>
-                    </div>
-                </a>
-                <a href="{{ route('consultations.history') }}" class="flex-1 text-center py-2 {{ request()->routeIs('consultations.history') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                    <div class="flex flex-col items-center text-sm">
-                        <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v4m8-4v4M3 11h18M5 21h14a2 2 0 002-2V7H3v12a2 2 0 002 2z"/></svg>
-                        <span>History</span>
-                    </div>
-                </a>
-            @endif
+    @php
+        // Shared with the desktop sidebar above — same paths, so a module's
+        // icon on mobile is always the exact icon it has on desktop.
+        $navIcon = [
+            'dashboard' => 'm2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25',
+            'inbox' => 'M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z',
+            'follow_up' => 'M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75',
+            'history' => 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+            'active' => 'M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z',
+            'scheduled' => 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5',
+            'users' => 'M12 4.354a4 4 0 014 4V7h1.5a2.5 2.5 0 012.5 2.5v11a1 1 0 01-1 1H4a1 1 0 01-1-1v-11a2.5 2.5 0 012.5-2.5H8V8.354a4 4 0 014-4z',
+            'new' => 'M12 4v16m8-8H4',
+        ];
+    @endphp
 
-            <!-- Profile tab (mobile) -->
-            <a href="{{ route('profile.edit') }}" class="flex-1 text-center py-2 {{ request()->routeIs('profile.edit') ? 'text-white bg-clsu-green rounded-md' : 'text-gray-600' }} mx-1">
-                <div class="flex flex-col items-center text-sm">
-                    <svg class="h-6 w-6 mb-1 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A9 9 0 1118.879 6.196 9 9 0 015.12 17.804zM15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                    <span>Profile</span>
-                </div>
-            </a>
+    <!-- Mobile bottom navigation (visible only on small screens). Icon-only
+         by design: matching each role's full sidebar link set (not just a
+         subset) only fits in this space without labels. Every icon reuses
+         the exact path from the corresponding sidebar link above, and each
+         link's accessible name comes from aria-label since there's no
+         visible text. -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 sm:hidden z-40">
+        <div class="max-w-7xl mx-auto px-2 pt-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex items-center">
+            @if(Auth::check() && Auth::user()->role === 'nurse')
+                <x-mobile-nav-icon :href="route('nurse.dashboard', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.dashboard')" :path="$navIcon['dashboard']" label="Dashboard" />
+                <x-mobile-nav-icon :href="route('nurse.consultation_inbox', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.consultation_inbox')" :path="$navIcon['inbox']" label="Consultation Inbox" />
+                <x-mobile-nav-icon :href="route('nurse.follow_up_requests', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.follow_up_requests')" :path="$navIcon['follow_up']" label="Follow-up Requests" />
+                <x-mobile-nav-icon :href="route('nurse.consultation_history', ['nurse' => Auth::user()])" :active="request()->routeIs('nurse.consultation_history')" :path="$navIcon['history']" label="Consultation History" />
+            @elseif(Auth::check() && Auth::user()->role === 'physician')
+                <x-mobile-nav-icon :href="route('physician.dashboard', ['physician' => Auth::user()])" :active="request()->routeIs('physician.dashboard')" :path="$navIcon['dashboard']" label="Dashboard" />
+                <x-mobile-nav-icon :href="route('physician.consultation_inbox', ['physician' => Auth::user()])" :active="request()->routeIs('physician.consultation_inbox')" :path="$navIcon['inbox']" label="Consultation Inbox" />
+                <x-mobile-nav-icon :href="route('physician.follow_up_requests', ['physician' => Auth::user()])" :active="request()->routeIs('physician.follow_up_requests')" :path="$navIcon['follow_up']" label="Follow-up Requests" />
+                <x-mobile-nav-icon :href="route('physician.scheduled_consultation', ['physician' => Auth::user()])" :active="request()->routeIs('physician.scheduled_consultation')" :path="$navIcon['scheduled']" label="Scheduled Consultations" />
+                <x-mobile-nav-icon :href="route('physician.consultation_history', ['physician' => Auth::user()])" :active="request()->routeIs('physician.consultation_history')" :path="$navIcon['history']" label="Consultation History" />
+            @elseif(Auth::check() && Auth::user()->role === 'admin')
+                <x-mobile-nav-icon :href="route('dashboard')" :active="request()->routeIs('dashboard')" :path="$navIcon['dashboard']" label="Dashboard" />
+                <x-mobile-nav-icon :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')" :path="$navIcon['users']" label="User Management" />
+            @else
+                <x-mobile-nav-icon :href="route('dashboard')" :active="request()->routeIs('dashboard')" :path="$navIcon['dashboard']" label="Dashboard" />
+                <x-mobile-nav-icon :href="route('newconsultation')" :active="request()->routeIs('newconsultation')" :path="$navIcon['new']" label="New Consultation" />
+                <x-mobile-nav-icon :href="route('consultations.history')" :active="request()->routeIs('consultations.history')" :path="$navIcon['history']" label="Consultation History" />
+            @endif
         </div>
     </nav>
+
+    @if(Auth::check() && Auth::user()->role === 'physician' && ! request()->routeIs('physician.active_consultation'))
+        {{-- Floating action button — the active-consultation icon moved here
+             from the bottom nav row so it reads as the primary action
+             rather than one item among equals. Hidden on the destination
+             page itself, and positioned clear of the fixed bottom nav. --}}
+        <a
+            href="{{ route('physician.active_consultation', ['physician' => Auth::user()]) }}"
+            aria-label="{{ __('Active Consultations') }}"
+            title="{{ __('Active Consultations') }}"
+            class="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-white shadow-lg transition hover:bg-brand-green-deep sm:hidden"
+        >
+            <svg class="h-6 w-6 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $navIcon['active'] }}" />
+            </svg>
+        </a>
+    @elseif(Auth::check() && Auth::user()->role === 'patient' && ! request()->routeIs('dashboard'))
+        {{-- Patients have no standalone "active consultation" page — it's
+             surfaced as a card on their dashboard — so the FAB links there. --}}
+        <a
+            href="{{ route('dashboard') }}"
+            aria-label="{{ __('Active Consultation') }}"
+            title="{{ __('Active Consultation') }}"
+            class="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-white shadow-lg transition hover:bg-brand-green-deep sm:hidden"
+        >
+            <svg class="h-6 w-6 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $navIcon['active'] }}" />
+            </svg>
+        </a>
+    @endif
