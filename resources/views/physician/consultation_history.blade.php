@@ -173,6 +173,19 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
+                    <div class="mb-4 flex justify-end">
+                        <x-dash.export-menu
+                            route="physician.consultation_history.export"
+                            :route-params="['physician' => $physician->user_id]"
+                            :query-params="array_filter([
+                                'date_filter' => $filters['date_filter'] ?? 'all',
+                                'status' => $filters['status'] ?? 'all',
+                                'consultation_type' => $filters['consultation_type'] ?? 'all',
+                                'search' => $filters['search'] ?? '',
+                            ])"
+                            label="Export History"
+                        />
+                    </div>
                     <form id="physician-history-filter-form" method="GET" action="{{ route('physician.consultation_history', ['physician' => $physician->user_id]) }}" class="mb-6 rounded-2xl border border-gray-200 bg-slate-50 p-4">
                         <div class="grid gap-4 sm:grid-cols-4">
                             <div>

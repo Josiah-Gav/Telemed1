@@ -20,11 +20,19 @@
             </div>
 
             {{-- ================= FILTER (admin: filter sits at the top — only "in flight" below is unfiltered) ================= --}}
-            <x-dash.filter-bar
-                :date-range="$dateRange"
-                :action="route('dashboard')"
-                scope-note="Applies to service-health, case-mix, and symptom analytics below. 'In flight now' always shows current state."
-            />
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex-1">
+                    <x-dash.filter-bar
+                        :date-range="$dateRange"
+                        :action="route('dashboard')"
+                        scope-note="Applies to service-health, case-mix, and symptom analytics below. 'In flight now' always shows current state."
+                    />
+                </div>
+                <x-dash.export-menu
+                    route="admin.dashboard.export"
+                    :date-range="$dateRange"
+                />
+            </div>
 
             {{-- ================= SERVICE HEALTH ================= --}}
             <x-dash.section id="service-health" title="Service Health">

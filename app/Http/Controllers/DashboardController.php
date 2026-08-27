@@ -7,12 +7,79 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Consultation;
 use App\Models\FollowUpRequest;
 use App\Services\DashboardAnalyticsService;
+use App\Services\Export\DashboardExportRows;
+use App\Support\CsvDownload;
 use App\Support\DateRange;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class DashboardController extends Controller
 {
     public function __construct(private readonly DashboardAnalyticsService $analyticsService)
     {
+    }
+
+    /** Mirrors Admin\UserManagementController::authorizeAdmin() — role check only, no per-record ownership. */
+    private function authorizeAdmin(): void
+    {
+        if (Auth::user()->role !== 'admin') {
+            abort(403, 'Unauthorized access.');
+        }
+    }
+
+    /**
+     * CSV/PDF export of the same analytics the admin dashboard renders,
+     * date-ranged identically — see DashboardExportRows' class docblock for
+     * why the mapping step never recomputes a metric. Both formats consume
+     * the same $sections, so they cannot disagree. The symptom sections
+     * carry SymptomAnalytics' k=3 suppression through unchanged: the
+     * suppressed count is reported, the suppressed terms never are.
+     */
+    public function adminDashboardExport(Request $request)
+    {
+        $this->authorizeAdmin();
+
+        $format = (string) $request->query('format', 'csv');
+
+        if (! in_array($format, ['csv', 'pdf'], true)) {
+            abort(422, 'Unsupported export format.');
+        }
+
+        $dateRange = DateRange::fromInput(
+            $request->query('range'),
+            $request->query('start'),
+            $request->query('end'),
+            'last_30_days',
+        );
+
+        // The authenticated user's canonical display name — same
+        // trim(first_name.' '.last_name) convention used everywhere else in
+        // this app (see ConsultationHistoryRows::relationName()) — resolved
+        // here in the controller and passed into the pure mapper; the mapper
+        // never touches Auth itself.
+        $generatedBy = trim(Auth::user()->first_name.' '.Auth::user()->last_name);
+        $timelineLabel = DashboardExportRows::timelineLabel($dateRange->preset, $dateRange->start->toDateString(), $dateRange->end->toDateString());
+
+        $analytics = $this->analyticsService->forAdmin($dateRange);
+        $sections = DashboardExportRows::forRole('admin', $analytics, now(), $generatedBy, $timelineLabel);
+        $filename = $this->sanitizeExportFilename("Admin {$generatedBy} {$timelineLabel} Report");
+
+        if ($format === 'pdf') {
+            // no-store mirrors CsvDownload: these reports carry
+            // patient-derived aggregates and must not be cached.
+            return Pdf::loadView('exports.dashboard', ['sections' => $sections])
+                ->setPaper('a4', 'portrait')
+                ->download($filename.'.pdf')
+                ->withHeaders([
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                    'Pragma' => 'no-cache',
+                    'Expires' => '0',
+                ]);
+        }
+
+        return CsvDownload::stream(
+            $filename.'.csv',
+            DashboardExportRows::toCsvRows($sections),
+        );
     }
 
     public function index(Request $request)
@@ -295,5 +362,17 @@ class DashboardController extends Controller
         }
 
         return $statusClasses . 'bg-slate-100 text-slate-700';
+    }
+
+    /**
+     * Strips characters a filesystem/browser download would reject
+     * (/ : \ * ? " < > |) from an otherwise-readable export report name —
+     * e.g. "Admin Pedro Reyes Last 30 Days Report" stays exactly as-is,
+     * spaces included, since only these nine characters are actually unsafe
+     * in a filename.
+     */
+    private function sanitizeExportFilename(string $name): string
+    {
+        return str_replace(['/', ':', '\\', '*', '?', '"', '<', '>', '|'], '-', $name);
     }
 }

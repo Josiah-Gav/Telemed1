@@ -10,8 +10,11 @@ use App\Models\User;
 use App\Enums\NotificationType;
 use App\Services\ConsultationOwnershipService;
 use App\Services\DashboardAnalyticsService;
+use App\Services\Export\DashboardExportRows;
 use App\Services\NotificationService;
+use App\Support\CsvDownload;
 use App\Support\DateRange;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class NurseController extends Controller
 {
@@ -46,6 +49,60 @@ class NurseController extends Controller
             'analytics' => $this->analyticsService->forNurse($nurse, $dateRange),
             'dateRange' => $dateRange,
         ]);
+    }
+
+    /**
+     * CSV/PDF export of the same analytics the nurse dashboard renders,
+     * scoped and date-ranged identically — see DashboardExportRows' class
+     * docblock for why the mapping step never recomputes a metric. Both
+     * formats consume the same $sections, so they cannot disagree.
+     */
+    public function dashboardExport(User $nurse, Request $request)
+    {
+        $this->authorizeNurse($nurse);
+
+        $format = (string) $request->query('format', 'csv');
+
+        if (! in_array($format, ['csv', 'pdf'], true)) {
+            abort(422, 'Unsupported export format.');
+        }
+
+        $dateRange = DateRange::fromInput(
+            $request->query('range'),
+            $request->query('start'),
+            $request->query('end'),
+            'last_30_days',
+        );
+
+        // The authenticated user's canonical display name — same
+        // trim(first_name.' '.last_name) convention used everywhere else in
+        // this app (see ConsultationHistoryRows::relationName()) — resolved
+        // here in the controller and passed into the pure mapper; the mapper
+        // never touches Auth itself.
+        $generatedBy = trim(Auth::user()->first_name.' '.Auth::user()->last_name);
+        $timelineLabel = DashboardExportRows::timelineLabel($dateRange->preset, $dateRange->start->toDateString(), $dateRange->end->toDateString());
+
+        $analytics = $this->analyticsService->forNurse($nurse, $dateRange);
+        $sections = DashboardExportRows::forRole('nurse', $analytics, now(), $generatedBy, $timelineLabel);
+        $filename = $this->sanitizeExportFilename("Nurse {$generatedBy} {$timelineLabel} Report");
+
+        if ($format === 'pdf') {
+            // no-store mirrors CsvDownload: these reports carry
+            // patient-derived aggregates and must not be cached.
+            return Pdf::loadView('exports.dashboard', ['sections' => $sections])
+                ->setPaper('a4', 'portrait')
+                ->download($filename.'.pdf')
+                ->withHeaders([
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                    'Pragma' => 'no-cache',
+                    'Expires' => '0',
+                ]);
+        }
+
+        return CsvDownload::stream(
+            $filename.'.csv',
+            DashboardExportRows::toCsvRows($sections),
+        );
     }
 
     public function consultationInbox(User $nurse)
@@ -248,5 +305,17 @@ class NurseController extends Controller
             && $user->online_status === 'online'
             && $user->last_seen_at
             && $user->last_seen_at->gt(now()->subMinutes(2));
+    }
+
+    /**
+     * Strips characters a filesystem/browser download would reject
+     * (/ : \ * ? " < > |) from an otherwise-readable export report name —
+     * e.g. "Nurse Maria Santos Last 30 Days Report" stays exactly as-is,
+     * spaces included, since only these nine characters are actually unsafe
+     * in a filename.
+     */
+    private function sanitizeExportFilename(string $name): string
+    {
+        return str_replace(['/', ':', '\\', '*', '?', '"', '<', '>', '|'], '-', $name);
     }
 }

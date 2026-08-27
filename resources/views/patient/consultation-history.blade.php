@@ -15,7 +15,18 @@
                                 <h3 class="text-lg font-semibold text-slate-900">Your Consultation History</h3>
                                 <p class="mt-1 text-sm text-slate-500">Review your past consultation requests and their status.</p>
                             </div>
-                            <a href="{{ route('consultations.create') }}" class="inline-flex items-center justify-center rounded-full bg-brand-green px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-green-deep">New Consultation</a>
+                            <div class="flex items-center gap-2">
+                                <x-dash.export-menu
+                                    route="consultations.history.export"
+                                    :query-params="[
+                                        'date_filter' => $filters['date_filter'] ?? 'all',
+                                        'status' => $filters['status'] ?? 'all',
+                                        'consultation_type' => $filters['consultation_type'] ?? 'all',
+                                    ]"
+                                    label="Export History"
+                                />
+                                <a href="{{ route('consultations.create') }}" class="inline-flex items-center justify-center rounded-full bg-brand-green px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-green-deep">New Consultation</a>
+                            </div>
                         </div>
 
                                 <form method="GET" action="{{ route('consultations.history') }}" class="rounded-2xl border border-gray-200 bg-slate-50 p-4">

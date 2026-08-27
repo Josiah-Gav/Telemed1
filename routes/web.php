@@ -37,6 +37,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard/active-consultation', [DashboardController::class, 'activeConsultation'])
         ->name('dashboard.active_consultation');
 
+    Route::get('/admin/dashboard/export', [DashboardController::class, 'adminDashboardExport'])
+        ->name('admin.dashboard.export');
+
+    // Placed in this auth+verified group deliberately, unlike the weaker
+    // auth-only /consultations/history route below — an export is a
+    // deliberate download action and gets the stronger middleware even
+    // though its HTML sibling currently does not (Phase 6).
+    Route::get('/consultations/history/export', [ConsultationController::class, 'historyExport'])
+        ->name('consultations.history.export');
+
     Route::get('/admin/users', [\App\Http\Controllers\Admin\UserManagementController::class, 'index'])
         ->name('admin.users.index');
     Route::get('/admin/users/create', [\App\Http\Controllers\Admin\UserManagementController::class, 'create'])
@@ -69,6 +79,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('nurses/{nurse}')->group(function () {
         Route::get('/dashboard', [\App\Http\Controllers\NurseController::class, 'dashboard'])
             ->name('nurse.dashboard');
+        Route::get('/dashboard/export', [\App\Http\Controllers\NurseController::class, 'dashboardExport'])
+            ->name('nurse.dashboard.export');
 
         Route::get('/consultation-inbox', [\App\Http\Controllers\NurseController::class, 'consultationInbox'])
             ->name('nurse.consultation_inbox');
@@ -90,6 +102,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('physicians/{physician}')->group(function () {
         Route::get('/dashboard', [\App\Http\Controllers\PhysicianController::class, 'dashboard'])
             ->name('physician.dashboard');
+        Route::get('/dashboard/export', [\App\Http\Controllers\PhysicianController::class, 'dashboardExport'])
+            ->name('physician.dashboard.export');
         Route::get('/consultation-inbox', [\App\Http\Controllers\PhysicianController::class, 'consultationInbox'])
             ->name('physician.consultation_inbox');
         Route::get('/consultation-inbox/refresh', [\App\Http\Controllers\PhysicianController::class, 'consultationInboxRefresh'])
@@ -116,6 +130,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('physician.follow_up.create');
         Route::get('/consultation-history', [\App\Http\Controllers\PhysicianController::class, 'consultationHistory'])
             ->name('physician.consultation_history');
+        Route::get('/consultation-history/export', [\App\Http\Controllers\PhysicianController::class, 'consultationHistoryExport'])
+            ->name('physician.consultation_history.export');
         Route::get('/active_consultation', [\App\Http\Controllers\PhysicianController::class, 'activeConsultations'])
             ->name('physician.active_consultation');
         Route::get('/scheduled_consultation', [\App\Http\Controllers\PhysicianController::class, 'scheduledConsultations'])

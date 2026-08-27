@@ -19,8 +19,13 @@ use Illuminate\Http\Request;
 use App\Enums\NotificationType;
 use App\Services\ConsultationOwnershipService;
 use App\Services\DashboardAnalyticsService;
+use App\Services\Export\ConsultationHistoryQuery;
+use App\Services\Export\ConsultationHistoryRows;
+use App\Services\Export\DashboardExportRows;
 use App\Services\NotificationService;
+use App\Support\CsvDownload;
 use App\Support\DateRange;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class PhysicianController extends Controller
 {
@@ -54,7 +59,61 @@ class PhysicianController extends Controller
             'dateRange' => $dateRange,
         ]);
     }
-    
+
+    /**
+     * CSV/PDF export of the same analytics the physician dashboard renders,
+     * scoped and date-ranged identically — see DashboardExportRows' class
+     * docblock for why the mapping step never recomputes a metric. Both
+     * formats consume the same $sections, so they cannot disagree.
+     */
+    public function dashboardExport(User $physician, Request $request)
+    {
+        $this->authorizePhysician($physician);
+
+        $format = (string) $request->query('format', 'csv');
+
+        if (! in_array($format, ['csv', 'pdf'], true)) {
+            abort(422, 'Unsupported export format.');
+        }
+
+        $dateRange = DateRange::fromInput(
+            $request->query('range'),
+            $request->query('start'),
+            $request->query('end'),
+            'this_month',
+        );
+
+        // The authenticated user's canonical display name — same
+        // trim(first_name.' '.last_name) convention used everywhere else in
+        // this app (see ConsultationHistoryRows::relationName()) — resolved
+        // here in the controller and passed into the pure mapper; the mapper
+        // never touches Auth itself.
+        $generatedBy = trim(Auth::user()->first_name.' '.Auth::user()->last_name);
+        $timelineLabel = DashboardExportRows::timelineLabel($dateRange->preset, $dateRange->start->toDateString(), $dateRange->end->toDateString());
+
+        $analytics = $this->analyticsService->forPhysician($physician, $dateRange);
+        $sections = DashboardExportRows::forRole('physician', $analytics, now(), $generatedBy, $timelineLabel);
+        $filename = $this->sanitizeExportFilename("Physician {$generatedBy} {$timelineLabel} Report");
+
+        if ($format === 'pdf') {
+            // no-store mirrors CsvDownload: these reports carry
+            // patient-derived aggregates and must not be cached.
+            return Pdf::loadView('exports.dashboard', ['sections' => $sections])
+                ->setPaper('a4', 'portrait')
+                ->download($filename.'.pdf')
+                ->withHeaders([
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                    'Pragma' => 'no-cache',
+                    'Expires' => '0',
+                ]);
+        }
+
+        return CsvDownload::stream(
+            $filename.'.csv',
+            DashboardExportRows::toCsvRows($sections),
+        );
+    }
+
     public function consultationInbox(User $physician)
     {
         $this->authorizePhysician($physician);
@@ -591,94 +650,27 @@ class PhysicianController extends Controller
     {
         $this->authorizePhysician($physician);
 
-        $dateFilter = (string) request()->query('date_filter', 'all');
-        $statusFilter = (string) request()->query('status', 'all');
-        $typeFilter = (string) request()->query('consultation_type', 'all');
+        // Filtering and query construction live in ConsultationHistoryQuery so
+        // the Phase 6 export can reuse the exact same semantics. Authorization
+        // stays here (authorizePhysician above); the service never touches Auth.
         $search = trim((string) request()->query('search', ''));
 
-        $allowedDateFilters = ['today', 'last_7_days', 'last_30_days', 'all'];
-        $allowedStatusFilters = ['completed', 'cancelled', 'rejected', 'all'];
-        $allowedTypeFilters = ['follow_up', 'general', 'all'];
+        $filters = ConsultationHistoryQuery::normalizeFilters(
+            request()->query('date_filter', 'all'),
+            request()->query('status', 'all'),
+            request()->query('consultation_type', 'all'),
+        ) + ['search' => $search];
 
-        if (!in_array($dateFilter, $allowedDateFilters, true)) {
-            $dateFilter = 'all';
-        }
+        $historyConsultations = ConsultationHistoryQuery::forPhysician((int) Auth::id(), $filters)->get();
 
-        if (!in_array($statusFilter, $allowedStatusFilters, true)) {
-            $statusFilter = 'all';
-        }
+        // Moved into ConsultationHistoryQuery::decorateHasExistingFollowUp()
+        // in Phase 6 so the physician history export can reproduce the exact
+        // same value from one implementation — see that method's docblock.
+        ConsultationHistoryQuery::decorateHasExistingFollowUp($historyConsultations);
 
-        if (!in_array($typeFilter, $allowedTypeFilters, true)) {
-            $typeFilter = 'all';
-        }
-
-        $historyConsultations = Consultation::with(['patient', 'nurse', 'consultationSession'])
-            ->where('assigned_physician_id', Auth::id())
-            ->where(function ($query) {
-                $query->whereIn('request_status', ['completed', 'rejected', 'cancelled'])
-                    ->orWhereHas('consultationSession', function ($sessionQuery) {
-                        $sessionQuery->where('consultation_status', 'completed');
-                    });
-            })
-            ->when($statusFilter !== 'all', function ($query) use ($statusFilter) {
-                $query->where('request_status', $statusFilter);
-            })
-            ->when($typeFilter === 'follow_up', function ($query) {
-                $query->where('type', 'follow_up');
-            })
-            ->when($typeFilter === 'general', function ($query) {
-                $query->where(function ($typeQuery) {
-                    $typeQuery->whereNull('type')->orWhere('type', '!=', 'follow_up');
-                });
-            })
-            ->when($dateFilter === 'today', function ($query) {
-                $query->whereDate('submitted_at', now()->toDateString());
-            })
-            ->when($dateFilter === 'last_7_days', function ($query) {
-                $query->where('submitted_at', '>=', now()->subDays(7)->startOfDay());
-            })
-            ->when($dateFilter === 'last_30_days', function ($query) {
-                $query->where('submitted_at', '>=', now()->subDays(30)->startOfDay());
-            })
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($searchQuery) use ($search) {
-                    $searchQuery->whereHas('patient', function ($patientQuery) use ($search) {
-                        $patientQuery->where('first_name', 'like', '%' . $search . '%')
-                            ->orWhere('last_name', 'like', '%' . $search . '%');
-                    })->orWhereHas('nurse', function ($nurseQuery) use ($search) {
-                        $nurseQuery->where('first_name', 'like', '%' . $search . '%')
-                            ->orWhere('last_name', 'like', '%' . $search . '%');
-                    });
-                });
-            })
-            ->orderByDesc('updated_at')
-            ->get();
-
-        $sourceSessionIds = $historyConsultations
-            ->pluck('consultationSession.id')
-            ->filter()
-            ->values();
-
-        $parentSessionIdsWithFollowUp = Consultation::query()
-            ->where('type', 'follow_up')
-            ->whereIn('parent_consultation_id', $sourceSessionIds)
-            ->pluck('parent_consultation_id')
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
-
-        $historyConsultations->each(function (Consultation $consultation) use ($parentSessionIdsWithFollowUp) {
-            $sessionId = (int) ($consultation->consultationSession?->id ?? 0);
-            $consultation->setAttribute('has_existing_follow_up', $sessionId > 0 && $parentSessionIdsWithFollowUp->contains($sessionId));
-        });
-
-        $filters = [
-            'date_filter' => $dateFilter,
-            'status' => $statusFilter,
-            'consultation_type' => $typeFilter,
-            'search' => $search,
-        ];
-
+        // $filters already holds exactly the previous
+        // date_filter/status/consultation_type/search array, in that order,
+        // built by normalizeFilters() above.
         if (request()->ajax()) {
             return response()->json([
                 'html' => view('physician.partials.consultation_history_table', [
@@ -693,6 +685,84 @@ class PhysicianController extends Controller
             'historyConsultations' => $historyConsultations,
             'filters' => $filters,
         ]);
+    }
+
+    /**
+     * CSV/PDF export of this physician's own consultation history. Filtering,
+     * scoping, ordering, and the has_existing_follow_up decoration are
+     * identical to consultationHistory() above — both call
+     * ConsultationHistoryQuery and ConsultationHistoryQuery::
+     * decorateHasExistingFollowUp(), so the export can never disagree with
+     * what the HTML page currently shows for the same query string.
+     */
+    public function consultationHistoryExport(User $physician, Request $request)
+    {
+        $this->authorizePhysician($physician);
+
+        $format = (string) $request->query('format', 'csv');
+
+        if (! in_array($format, ['csv', 'pdf'], true)) {
+            abort(422, 'Unsupported export format.');
+        }
+
+        $search = trim((string) $request->query('search', ''));
+
+        $filters = ConsultationHistoryQuery::normalizeFilters(
+            $request->query('date_filter', 'all'),
+            $request->query('status', 'all'),
+            $request->query('consultation_type', 'all'),
+        ) + ['search' => $search];
+
+        $historyConsultations = ConsultationHistoryQuery::forPhysician((int) Auth::id(), $filters)->get();
+
+        ConsultationHistoryQuery::decorateHasExistingFollowUp($historyConsultations);
+
+        $rows = ConsultationHistoryRows::physicianRows($historyConsultations);
+
+        // The authenticated user's canonical display name — resolved from
+        // Auth explicitly here (not from the route-bound $physician, even
+        // though authorizePhysician() above already guarantees they're the
+        // same user) so every export action obtains it the same way.
+        $generatedBy = trim(Auth::user()->first_name.' '.Auth::user()->last_name);
+        $timelineLabel = ConsultationHistoryRows::timelineLabel($filters['date_filter'] ?? 'all');
+
+        $title = "Physician {$generatedBy} {$timelineLabel} History Report";
+        $meta = array_merge([
+            ['Role', 'Physician'],
+            ['Owner', trim($physician->first_name.' '.$physician->last_name)],
+            ['Generated By', $generatedBy],
+        ], ConsultationHistoryRows::filterSummaryRows($filters), [
+            ['Generated', now()->format('Y-m-d H:i')],
+        ]);
+
+        $filename = $this->sanitizeExportFilename($title);
+
+        if ($format === 'pdf') {
+            $totalCount = count($rows);
+            $pdfRows = array_slice($rows, 0, ConsultationHistoryRows::PDF_ROW_CAP);
+
+            return Pdf::loadView('exports.consultation-history', [
+                'title' => $title,
+                'meta' => $meta,
+                'headers' => ConsultationHistoryRows::PHYSICIAN_HEADERS,
+                'rows' => $pdfRows,
+                'totalCount' => $totalCount,
+                'truncated' => $totalCount > ConsultationHistoryRows::PDF_ROW_CAP,
+                'rowCap' => ConsultationHistoryRows::PDF_ROW_CAP,
+            ])
+                ->setPaper('a4', 'landscape')
+                ->download($filename.'.pdf')
+                ->withHeaders([
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                    'Pragma' => 'no-cache',
+                    'Expires' => '0',
+                ]);
+        }
+
+        return CsvDownload::stream(
+            $filename.'.csv',
+            ConsultationHistoryRows::toCsvRows($title, $meta, ConsultationHistoryRows::PHYSICIAN_HEADERS, $rows),
+        );
     }
 
     public function activeConsultations(User $physician)
@@ -1321,5 +1391,17 @@ class PhysicianController extends Controller
         $slotStart = CarbonImmutable::parse($slotDate . ' ' . $slot->start_time);
 
         return CarbonImmutable::now()->greaterThanOrEqualTo($slotStart);
+    }
+
+    /**
+     * Strips characters a filesystem/browser download would reject
+     * (/ : \ * ? " < > |) from an otherwise-readable export report name —
+     * e.g. "Physician Juan Dela Cruz Last 30 Days Report" stays exactly
+     * as-is, spaces included, since only these nine characters are actually
+     * unsafe in a filename.
+     */
+    private function sanitizeExportFilename(string $name): string
+    {
+        return str_replace(['/', ':', '\\', '*', '?', '"', '<', '>', '|'], '-', $name);
     }
 }

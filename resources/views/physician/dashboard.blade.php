@@ -43,11 +43,20 @@
             </section>
 
             {{-- ================= BAND 3 — FILTER BOUNDARY ================= --}}
-            <x-dash.filter-bar
-                :date-range="$dateRange"
-                :action="route('physician.dashboard', ['physician' => Auth::user()->user_id])"
-                scope-note="Historical analytics only — 'Active now' and 'Scheduled ahead' above always show current state, regardless of this filter."
-            />
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex-1">
+                    <x-dash.filter-bar
+                        :date-range="$dateRange"
+                        :action="route('physician.dashboard', ['physician' => Auth::user()->user_id])"
+                        scope-note="Historical analytics only — 'Active now' and 'Scheduled ahead' above always show current state, regardless of this filter."
+                    />
+                </div>
+                <x-dash.export-menu
+                    route="physician.dashboard.export"
+                    :route-params="['physician' => Auth::user()->user_id]"
+                    :date-range="$dateRange"
+                />
+            </div>
 
             {{-- ================= BAND 4 — HISTORICAL ANALYTICS (date-filtered) ================= --}}
             <x-dash.section
