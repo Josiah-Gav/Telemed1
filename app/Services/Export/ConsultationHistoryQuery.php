@@ -30,9 +30,12 @@ use Illuminate\Support\Collection;
  * (authorizePhysician(), and the patient page's implicit auth()->id()
  * scoping). It also knows nothing about CSV, PDF, or Blade.
  *
- * The patient and physician pages differ in ways that are preserved, not
- * reconciled: ordering column (submitted_at vs updated_at), eager loading
- * (none vs patient/nurse/consultationSession), and search (physician only).
+ * The patient, physician, and nurse pages differ in ways that are
+ * preserved, not reconciled: ordering column (submitted_at vs updated_at),
+ * eager loading (none vs patient/nurse/consultationSession vs
+ * patient/physician/consultationSession), and search (physician and nurse
+ * only — patient/nurse for the physician page, patient/physician for the
+ * nurse page, via applySearchFilter()'s $relations parameter).
  */
 class ConsultationHistoryQuery
 {
@@ -147,6 +150,32 @@ class ConsultationHistoryQuery
     }
 
     /**
+     * The nurse's own concluded consultations — scoped via
+     * Consultation::scopeForNurse() (assigned_nurse_id), which stays set for
+     * the lifetime of a request and is inherited verbatim by any follow-up
+     * spawned from it, so a nurse's history includes follow-ups without any
+     * extra querying here. Mirrors forPhysician() otherwise: same concluded/
+     * status/type/date filters on submitted_at, same updated_at ordering,
+     * and search — but against patient-or-physician rather than
+     * patient-or-nurse, since every row's nurse is the viewer.
+     *
+     * @param  array{date_filter: string, status: string, consultation_type: string, search?: string}  $filters
+     */
+    public static function forNurse(int $nurseId, array $filters): Builder
+    {
+        $query = Consultation::with(['patient', 'physician', 'consultationSession'])
+            ->forNurse($nurseId);
+
+        self::applyConcludedOrSessionCompleted($query);
+        self::applyStatusFilter($query, $filters['status'] ?? 'all');
+        self::applyTypeFilter($query, $filters['consultation_type'] ?? 'all');
+        self::applyDateFilter($query, $filters['date_filter'] ?? 'all', 'submitted_at');
+        self::applySearchFilter($query, (string) ($filters['search'] ?? ''), ['patient', 'physician']);
+
+        return $query->orderByDesc('updated_at');
+    }
+
+    /**
      * Decorates each row of an already-fetched forPhysician() result with
      * has_existing_follow_up: true when a follow_up-type Consultation already
      * exists whose parent_consultation_id points at this row's
@@ -245,21 +274,28 @@ class ConsultationHistoryQuery
         };
     }
 
-    /** Physician-only. Matches the term against patient OR nurse first/last name. */
-    private static function applySearchFilter(Builder $query, string $search): void
+    /**
+     * Matches the term against the first/last name of each given relation.
+     * Defaults to patient/nurse — the physician page's original, unchanged
+     * behavior — so every existing caller keeps working exactly as before;
+     * the nurse page passes ['patient', 'physician'] instead, since every
+     * row's nurse is the viewer.
+     *
+     * @param  list<string>  $relations
+     */
+    private static function applySearchFilter(Builder $query, string $search, array $relations = ['patient', 'nurse']): void
     {
         if ($search === '') {
             return;
         }
 
-        $query->where(function ($searchQuery) use ($search) {
-            $searchQuery->whereHas('patient', function ($patientQuery) use ($search) {
-                $patientQuery->where('first_name', 'like', '%'.$search.'%')
-                    ->orWhere('last_name', 'like', '%'.$search.'%');
-            })->orWhereHas('nurse', function ($nurseQuery) use ($search) {
-                $nurseQuery->where('first_name', 'like', '%'.$search.'%')
-                    ->orWhere('last_name', 'like', '%'.$search.'%');
-            });
+        $query->where(function ($searchQuery) use ($search, $relations) {
+            foreach ($relations as $relation) {
+                $searchQuery->orWhereHas($relation, function ($relationQuery) use ($search) {
+                    $relationQuery->where('first_name', 'like', '%'.$search.'%')
+                        ->orWhere('last_name', 'like', '%'.$search.'%');
+                });
+            }
         });
     }
 }

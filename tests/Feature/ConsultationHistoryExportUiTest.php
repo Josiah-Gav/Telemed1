@@ -29,6 +29,11 @@ function historyUiPhysician(array $overrides = []): User
     return User::factory()->create(array_merge(['role' => 'physician', 'user_type' => 'staff'], $overrides));
 }
 
+function historyUiNurse(array $overrides = []): User
+{
+    return User::factory()->create(array_merge(['role' => 'nurse', 'user_type' => 'staff'], $overrides));
+}
+
 function historyUiConsultation(array $overrides = []): Consultation
 {
     return Consultation::forceCreate(array_merge([
@@ -176,10 +181,76 @@ it('still renders existing physician history content alongside the export contro
     $response->assertSee('Search Patient or Nurse');
 });
 
+// --- Nurse history (Phase 2) -------------------------------------------------
+
+it('renders the export control on the nurse consultation history page', function () {
+    $nurse = historyUiNurse();
+
+    $response = $this->actingAs($nurse)
+        ->get(route('nurse.consultation_history', ['nurse' => $nurse->user_id]));
+
+    $response->assertOk();
+    $response->assertSee('Export History');
+});
+
+it('links the nurse history export control to the CSV and PDF routes, scoped to that nurse', function () {
+    $nurse = historyUiNurse();
+
+    $response = $this->actingAs($nurse)
+        ->get(route('nurse.consultation_history', ['nurse' => $nurse->user_id]));
+
+    $response->assertSee(route('nurse.consultation_history.export', [
+        'nurse' => $nurse->user_id, 'date_filter' => 'all', 'status' => 'all', 'consultation_type' => 'all', 'format' => 'csv',
+    ]));
+    $response->assertSee(route('nurse.consultation_history.export', [
+        'nurse' => $nurse->user_id, 'date_filter' => 'all', 'status' => 'all', 'consultation_type' => 'all', 'format' => 'pdf',
+    ]));
+});
+
+it('preserves the nurse\'s currently selected filters, including search, in the export links', function () {
+    $nurse = historyUiNurse();
+
+    $response = $this->actingAs($nurse)->get(
+        route('nurse.consultation_history', ['nurse' => $nurse->user_id])
+            .'?date_filter=today&status=rejected&consultation_type=general&search=Mario'
+    );
+
+    $response->assertSee(route('nurse.consultation_history.export', [
+        'nurse' => $nurse->user_id,
+        'date_filter' => 'today', 'status' => 'rejected', 'consultation_type' => 'general', 'search' => 'Mario',
+        'format' => 'csv',
+    ]));
+});
+
+it('does not point one nurse\'s export link at another nurse\'s id', function () {
+    $nurseA = historyUiNurse();
+    $nurseB = historyUiNurse();
+
+    $response = $this->actingAs($nurseA)
+        ->get(route('nurse.consultation_history', ['nurse' => $nurseA->user_id]));
+
+    $response->assertDontSee("nurses/{$nurseB->user_id}/consultation-history/export");
+});
+
+it('still renders existing nurse history content alongside the export control', function () {
+    $nurse = historyUiNurse();
+    historyUiConsultation([
+        'patient_id' => historyUiPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'request_status' => 'completed',
+    ]);
+
+    $response = $this->actingAs($nurse)
+        ->get(route('nurse.consultation_history', ['nurse' => $nurse->user_id]));
+
+    $response->assertOk();
+    $response->assertSee('Search Patient or Physician');
+});
+
 // --- No export control where no history page/route exists -------------------
 
 it('does not render a history export control on the nurse dashboard, which has no history export route', function () {
-    $nurse = User::factory()->create(['role' => 'nurse', 'user_type' => 'staff']);
+    $nurse = historyUiNurse();
 
     $response = $this->actingAs($nurse)->get(route('nurse.dashboard', ['nurse' => $nurse->user_id]));
 
@@ -187,9 +258,13 @@ it('does not render a history export control on the nurse dashboard, which has n
     $response->assertDontSee('Export History');
 });
 
-it('confirms no nurse or admin consultation-history export route exists to accidentally link to', function () {
+it('confirms the nurse consultation-history export route now exists, and admin\'s still does not', function () {
+    // Phase 2: nurse.consultation_history.export was added, extending the
+    // existing history/export pipeline to nurses (see NurseController and
+    // ConsultationHistoryQuery::forNurse()). Admin has no consultation-history
+    // page at all, so it correctly still has no export route.
     $routeNames = collect(app('router')->getRoutes())->map(fn ($route) => $route->getName())->filter();
 
-    expect($routeNames)->not->toContain('nurse.consultation_history.export')
+    expect($routeNames)->toContain('nurse.consultation_history.export')
         ->and($routeNames)->not->toContain('admin.consultation_history.export');
 });

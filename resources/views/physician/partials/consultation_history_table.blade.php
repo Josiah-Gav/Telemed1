@@ -1,12 +1,11 @@
 @if($historyConsultations->isEmpty())
-    <p class="text-sm text-gray-500">{{ __('No consultation history found for the selected filters.') }}</p>
+    <x-dash.empty message="No consultation history found for the selected filters." />
 @else
     <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Patient Name') }}</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Symptoms') }}</th>
                     <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Assigned Nurse') }}</th>
                     <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Consultation Type') }}</th>
                     <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Completed At') }}</th>
@@ -21,26 +20,6 @@
                             {{ optional($consultation->patient)->first_name ? optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name : __('Unknown Patient') }}
                         </td>
                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                            @php
-                                $symptomsDisplay = __('N/A');
-                                $symptomsData = $consultation->symptoms_desc;
-
-                                if (!empty($symptomsData)) {
-                                    if (is_array($symptomsData)) {
-                                        $symptomsDisplay = collect($symptomsData)
-                                            ->map(function ($item) {
-                                                return is_array($item) ? ($item['name'] ?? null) : $item;
-                                            })
-                                            ->filter()
-                                            ->implode(', ');
-                                    } else {
-                                        $symptomsDisplay = $symptomsData;
-                                    }
-                                }
-                            @endphp
-                            {{ $symptomsDisplay }}
-                        </td>
-                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
                             {{ trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: __('Unassigned') }}
                         </td>
                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
@@ -50,29 +29,10 @@
                             {{ $consultationTypeLabel }}
                         </td>
                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                            {{ optional(optional($consultation->consultationSession)->completed_at)->format('Y-m-d H:i') ?? optional($consultation->updated_at)->format('Y-m-d H:i') ?? __('Unknown') }}
+                            {{ optional(optional($consultation->consultationSession)->completed_at)->format('M. j, Y g:i A') ?? optional($consultation->updated_at)->format('M. j, Y g:i A') ?? __('Unknown') }}
                         </td>
                         <td class="whitespace-nowrap px-6 py-4 text-sm">
-                            @php
-                                $status = $consultation->request_status;
-                                $badgeClasses = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ';
-                                if (in_array($status, ['rejected', 'cancelled'], true)) {
-                                    $badgeClasses .= 'bg-red-100 text-red-700';
-                                } elseif ($status === 'completed') {
-                                    $badgeClasses .= 'bg-emerald-100 text-emerald-700';
-                                } elseif (in_array($status, ['pending', 'assigned'], true)) {
-                                    $badgeClasses .= 'bg-yellow-100 text-yellow-700';
-                                } elseif ($status === 'scheduled') {
-                                    $badgeClasses .= 'bg-brand-gold-soft text-brand-green-deep';
-                                } elseif ($status === 'active') {
-                                    $badgeClasses .= 'bg-brand-green-soft text-brand-green-deep';
-                                } else {
-                                    $badgeClasses .= 'bg-slate-100 text-slate-700';
-                                }
-                            @endphp
-                            <span class="{{ $badgeClasses }}">
-                                {{ ucfirst($status) }}
-                            </span>
+                            <x-dash.badge :status="$consultation->request_status" />
                         </td>
                         <td class="whitespace-nowrap px-6 py-4 text-sm">
                             <div class="flex flex-wrap gap-2">

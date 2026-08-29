@@ -1130,3 +1130,211 @@ it('cannot have its physician history filename identity manipulated by forged ro
         ->and($disposition)->not->toContain('SomeoneElse')
         ->and($disposition)->not->toContain('Attacker');
 });
+
+// =====================================================================
+// Phase 2: nurse export — ConsultationHistoryQuery::forNurse() +
+// ConsultationHistoryRows::nurseRows(), mirroring the physician coverage
+// above.
+// =====================================================================
+
+it('lets a nurse export their own consultation history as CSV', function () {
+    $nurse = cheNurse();
+    cheConsultation(['patient_id' => chePatient()->user_id, 'assigned_nurse_id' => $nurse->user_id]);
+
+    $this->actingAs($nurse)
+        ->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]))
+        ->assertOk()
+        ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+});
+
+it('lets a nurse export their own consultation history as PDF', function () {
+    $nurse = cheNurse();
+    cheConsultation(['patient_id' => chePatient()->user_id, 'assigned_nurse_id' => $nurse->user_id]);
+
+    $response = $this->actingAs($nurse)
+        ->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]).'?format=pdf');
+
+    $response->assertOk();
+    expect($response->headers->get('Content-Type'))->toContain('application/pdf')
+        ->and(substr($response->getContent(), 0, 5))->toBe('%PDF-');
+});
+
+it('rejects a patient hitting the nurse export route', function () {
+    $patient = chePatient();
+    $nurse = cheNurse();
+
+    $this->actingAs($patient)
+        ->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]))
+        ->assertForbidden();
+});
+
+it('rejects a physician hitting the nurse export route', function () {
+    $physician = chePhysician();
+    $nurse = cheNurse();
+
+    $this->actingAs($physician)
+        ->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]))
+        ->assertForbidden();
+});
+
+it('rejects an admin hitting the nurse export route', function () {
+    $admin = cheAdmin();
+    $nurse = cheNurse();
+
+    $this->actingAs($admin)
+        ->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]))
+        ->assertForbidden();
+});
+
+it('rejects a nurse exporting another nurse\'s route parameter', function () {
+    $nurseA = cheNurse();
+    $nurseB = cheNurse();
+
+    $this->actingAs($nurseA)
+        ->get(route('nurse.consultation_history.export', ['nurse' => $nurseB->user_id]))
+        ->assertForbidden();
+});
+
+it('exports only the authenticated nurse\'s own records', function () {
+    $nurseA = cheNurse();
+    $nurseB = cheNurse();
+    cheConsultation(['patient_id' => chePatient()->user_id, 'assigned_nurse_id' => $nurseA->user_id, 'concern_category' => 'mine']);
+    cheConsultation(['patient_id' => chePatient()->user_id, 'assigned_nurse_id' => $nurseB->user_id, 'concern_category' => 'not-mine']);
+
+    $response = $this->actingAs($nurseA)->get(route('nurse.consultation_history.export', ['nurse' => $nurseA->user_id]));
+    $rows = parseHistoryCsv($response);
+
+    $categories = collect($rows)->pluck(2)->all();
+
+    expect($categories)->toContain('mine')
+        ->and($categories)->not->toContain('not-mine');
+});
+
+it('rejects an unsupported format for the nurse export', function () {
+    $nurse = cheNurse();
+
+    $this->actingAs($nurse)
+        ->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]).'?format=xlsx')
+        ->assertStatus(422);
+});
+
+it('returns 200 with a header row and a no-records note for an empty nurse CSV', function () {
+    $nurse = cheNurse();
+
+    $response = $this->actingAs($nurse)
+        ->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]));
+
+    $response->assertOk();
+    expect($response->streamedContent())->toContain('No records matched the selected filters.');
+});
+
+it('returns a valid, non-throwing PDF for an empty nurse export', function () {
+    $nurse = cheNurse();
+
+    $response = $this->actingAs($nurse)
+        ->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]).'?format=pdf');
+
+    $response->assertOk();
+    expect(substr($response->getContent(), 0, 5))->toBe('%PDF-');
+});
+
+it('produces nurseRows with the expected NURSE_HEADERS column count', function () {
+    $nurse = cheNurse();
+    cheConsultation([
+        'patient_id' => chePatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'assigned_physician_id' => chePhysician()->user_id,
+    ]);
+
+    $rows = ConsultationHistoryRows::nurseRows(
+        ConsultationHistoryQuery::forNurse((int) $nurse->user_id, [
+            'date_filter' => 'all', 'status' => 'all', 'consultation_type' => 'all',
+        ])->get()
+    );
+
+    expect($rows)->toHaveCount(1)
+        ->and(count($rows[0]))->toBe(count(ConsultationHistoryRows::NURSE_HEADERS));
+});
+
+it('falls back to updated_at for nurseRows Completed At when there is no session', function () {
+    $nurse = cheNurse();
+    $consultation = cheConsultation(['patient_id' => chePatient()->user_id, 'assigned_nurse_id' => $nurse->user_id]);
+
+    $rows = ConsultationHistoryRows::nurseRows(collect([$consultation->fresh()]));
+
+    expect($rows[0][7])->toBe($consultation->updated_at->format('Y-m-d H:i'));
+});
+
+it('does not include clinical field or Has Existing Follow-up headers in the nurse export', function () {
+    expect(implode(' ', ConsultationHistoryRows::NURSE_HEADERS))
+        ->not->toContain('Assessment')
+        ->not->toContain('Plan')
+        ->not->toContain('Diagnosis')
+        ->not->toContain('Prescription')
+        ->not->toContain('Has Existing Follow-up');
+});
+
+it('includes filter metadata rows in the nurse CSV export', function () {
+    $nurse = cheNurse();
+
+    $response = $this->actingAs($nurse)->get(
+        route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]).'?status=completed'
+    );
+    $rows = parseHistoryCsv($response);
+
+    expect(findHistoryCsvRow($rows, 'Role')[1])->toBe('Nurse')
+        ->and(findHistoryCsvRow($rows, 'Date Range'))->not->toBeNull()
+        ->and(findHistoryCsvRow($rows, 'Status')[1])->toBe('Completed')
+        ->and(findHistoryCsvRow($rows, 'Consultation Type'))->not->toBeNull()
+        ->and(findHistoryCsvRow($rows, 'Generated'))->not->toBeNull();
+});
+
+it('caps the nurse PDF at 500 rows even when more records exist', function () {
+    $nurse = cheNurse();
+
+    for ($i = 0; $i < 505; $i++) {
+        cheConsultation(['patient_id' => chePatient()->user_id, 'assigned_nurse_id' => $nurse->user_id, 'concern_category' => 'cat-'.$i, 'submitted_at' => now()->subMinutes($i)]);
+    }
+
+    $rows = ConsultationHistoryRows::nurseRows(
+        ConsultationHistoryQuery::forNurse((int) $nurse->user_id, [
+            'date_filter' => 'all', 'status' => 'all', 'consultation_type' => 'all',
+        ])->get()
+    );
+
+    expect(count($rows))->toBe(505);
+
+    $capped = array_slice($rows, 0, ConsultationHistoryRows::PDF_ROW_CAP);
+
+    expect(count($capped))->toBe(500);
+});
+
+it('sends no-store headers on the nurse CSV export', function () {
+    $nurse = cheNurse();
+
+    $response = $this->actingAs($nurse)->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]));
+
+    expect($response->headers->get('Cache-Control'))->toContain('no-store');
+});
+
+it('includes the authenticated nurse\'s canonical name as Generated By in the nurse CSV', function () {
+    $nurse = cheNurse(['first_name' => 'Rosa', 'last_name' => 'Dela Cruz']);
+
+    $response = $this->actingAs($nurse)->get(route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]));
+    $rows = parseHistoryCsv($response);
+
+    expect(findHistoryCsvRow($rows, 'Generated By')[1])->toBe('Rosa Dela Cruz');
+});
+
+it('generates the nurse CSV filename server-side, ignoring a forged filename parameter', function () {
+    $nurse = cheNurse();
+
+    $response = $this->actingAs($nurse)->get(
+        route('nurse.consultation_history.export', ['nurse' => $nurse->user_id]).'?filename=evil.csv'
+    );
+
+    expect($response->headers->get('Content-Disposition'))
+        ->toContain('Nurse')
+        ->toContain('History Report')
+        ->not->toContain('evil.csv');
+});

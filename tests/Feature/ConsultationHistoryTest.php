@@ -696,3 +696,145 @@ it('patient history returns an empty result for a non-patient rather than anothe
     $response->assertOk();
     expect(patientHistoryIds($response))->toBe([]);
 });
+
+// =====================================================================
+// NURSE — Phase 2: NurseController::consultationHistory()
+// =====================================================================
+
+/** @return array<int> request_ids in the order the nurse page returned them */
+function nurseHistoryIds($response): array
+{
+    return collect($response->viewData('historyConsultations'))
+        ->pluck('request_id')
+        ->map(fn ($id) => (int) $id)
+        ->all();
+}
+
+it('authenticated nurse can access their own history', function () {
+    $nurse = histNurse();
+    $match = histConsultation(['patient_id' => histPatient()->user_id, 'assigned_nurse_id' => $nurse->user_id]);
+
+    $response = $this->actingAs($nurse)->get(route('nurse.consultation_history', ['nurse' => $nurse->user_id]));
+
+    $response->assertOk()->assertViewIs('nurse.consultation_history');
+    expect(nurseHistoryIds($response))->toBe([(int) $match->request_id]);
+});
+
+it('nurse history refuses another nurse\'s route parameter', function () {
+    $nurseA = histNurse();
+    $nurseB = histNurse();
+
+    $this->actingAs($nurseA)
+        ->get(route('nurse.consultation_history', ['nurse' => $nurseB->user_id]))
+        ->assertForbidden();
+});
+
+it('nurse history refuses a physician', function () {
+    $physician = histPhysician();
+    $nurse = histNurse();
+
+    $this->actingAs($physician)
+        ->get(route('nurse.consultation_history', ['nurse' => $nurse->user_id]))
+        ->assertForbidden();
+});
+
+it('nurse history refuses a patient', function () {
+    $patient = histPatient();
+    $nurse = histNurse();
+
+    $this->actingAs($patient)
+        ->get(route('nurse.consultation_history', ['nurse' => $nurse->user_id]))
+        ->assertForbidden();
+});
+
+it('nurse history refuses an admin', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $nurse = histNurse();
+
+    $this->actingAs($admin)
+        ->get(route('nurse.consultation_history', ['nurse' => $nurse->user_id]))
+        ->assertForbidden();
+});
+
+it('nurse history redirects a guest to login', function () {
+    $nurse = histNurse();
+
+    $this->get(route('nurse.consultation_history', ['nurse' => $nurse->user_id]))
+        ->assertRedirect(route('login'));
+});
+
+it('nurse history returns the partial as JSON for an ajax request', function () {
+    $nurse = histNurse();
+    histConsultation(['patient_id' => histPatient()->user_id, 'assigned_nurse_id' => $nurse->user_id]);
+
+    $this->actingAs($nurse)
+        ->get(
+            route('nurse.consultation_history', ['nurse' => $nurse->user_id]),
+            ['X-Requested-With' => 'XMLHttpRequest']
+        )
+        ->assertOk()
+        ->assertJsonStructure(['html']);
+});
+
+it('nurse history renders the empty state when the nurse has no history', function () {
+    $nurse = histNurse();
+
+    $response = $this->actingAs($nurse)->get(route('nurse.consultation_history', ['nurse' => $nurse->user_id]));
+
+    $response->assertOk();
+    expect(nurseHistoryIds($response))->toBe([]);
+    $response->assertSee('No consultation history found for the selected filters.');
+});
+
+it('nurse history includes a follow-up consultation inherited from the nurse\'s original request', function () {
+    $nurse = histNurse();
+    $followUp = histConsultation([
+        'patient_id' => histPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'type' => 'follow_up',
+    ]);
+
+    $response = $this->actingAs($nurse)->get(route('nurse.consultation_history', [
+        'nurse' => $nurse->user_id,
+        'consultation_type' => 'follow_up',
+    ]));
+
+    expect(nurseHistoryIds($response))->toBe([(int) $followUp->request_id]);
+});
+
+it('nurse history filters by date_filter, status, and consultation_type together', function () {
+    $nurse = histNurse();
+    $match = histConsultation([
+        'patient_id' => histPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'request_status' => 'completed',
+        'type' => 'initial',
+        'submitted_at' => now(),
+    ]);
+    histConsultation([
+        'patient_id' => histPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'request_status' => 'cancelled',
+        'type' => 'initial',
+        'submitted_at' => now(),
+    ]);
+
+    $response = $this->actingAs($nurse)->get(route('nurse.consultation_history', [
+        'nurse' => $nurse->user_id,
+        'date_filter' => 'today',
+        'status' => 'completed',
+        'consultation_type' => 'general',
+    ]));
+
+    expect(nurseHistoryIds($response))->toBe([(int) $match->request_id]);
+});
+
+it('nurse history never returns another nurse\'s consultations', function () {
+    $nurseA = histNurse();
+    $nurseB = histNurse();
+    histConsultation(['patient_id' => histPatient()->user_id, 'assigned_nurse_id' => $nurseB->user_id]);
+
+    $response = $this->actingAs($nurseA)->get(route('nurse.consultation_history', ['nurse' => $nurseA->user_id]));
+
+    expect(nurseHistoryIds($response))->toBe([]);
+});

@@ -96,6 +96,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('/consultation-history', [\App\Http\Controllers\NurseController::class, 'consultationHistory'])
             ->name('nurse.consultation_history');
+        Route::get('/consultation-history/export', [\App\Http\Controllers\NurseController::class, 'consultationHistoryExport'])
+            ->name('nurse.consultation_history.export');
     });
 
     //Physician-specific navigation pages

@@ -200,6 +200,48 @@ class ConsultationHistoryRows
         })->values()->all();
     }
 
+    public const NURSE_HEADERS = [
+        'Patient',
+        'Symptoms',
+        'Concern Category',
+        'Priority',
+        'Assigned Physician',
+        'Consultation Type',
+        'Status',
+        'Completed At',
+        'Updated At',
+    ];
+
+    /**
+     * Mirrors resources/views/nurse/partials/consultation_history_table.blade.php
+     * column-for-column. No has_existing_follow_up column — that decoration
+     * exists only to drive the physician page's "Schedule Follow-up" button,
+     * which nurses cannot do — and no clinical fields, matching this class's
+     * rule that neither history page shows assessment/plan/diagnosis, so
+     * neither export does.
+     *
+     * @param  Collection<int, Consultation>  $historyConsultations
+     * @return list<list<string>>
+     */
+    public static function nurseRows(Collection $historyConsultations): array
+    {
+        return $historyConsultations->map(function (Consultation $consultation) {
+            $completedAt = $consultation->consultationSession?->completed_at ?? $consultation->updated_at;
+
+            return [
+                self::relationName($consultation->patient) ?: 'Unknown Patient',
+                self::flattenSymptoms($consultation->symptoms_desc),
+                (string) $consultation->concern_category,
+                (string) $consultation->priority_level,
+                self::relationName($consultation->physician) ?: 'Unassigned',
+                $consultation->type === 'follow_up' ? 'Follow-up' : 'General',
+                ucfirst((string) $consultation->request_status),
+                self::formatDateTime($completedAt),
+                self::formatDateTime($consultation->updated_at),
+            ];
+        })->values()->all();
+    }
+
     /**
      * Assembles a title row, the meta key/value rows, a blank separator, the
      * header row, and the data rows into one flat list ready for

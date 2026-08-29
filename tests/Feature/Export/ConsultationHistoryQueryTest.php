@@ -453,3 +453,231 @@ it('does not let the patient query see consultations merely assigned to that use
 
     expect(hqIds(ConsultationHistoryQuery::forPatient((int) $user->user_id, hqAllFilters())))->toBe([]);
 });
+
+// --- forNurse ----------------------------------------------------------
+
+it('scopes nurse results to the given nurse id only, via assigned_nurse_id', function () {
+    $a = hqNurse();
+    $b = hqNurse();
+    $mine = hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $a->user_id]);
+    hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $b->user_id]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $a->user_id, hqAllFilters())))
+        ->toBe([(int) $mine->request_id]);
+});
+
+it('returns an empty collection for a nurse with no history', function () {
+    $nurse = hqNurse();
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters())))->toBe([]);
+});
+
+it('includes a nurse consultation whose request_status is completed', function () {
+    $nurse = hqNurse();
+    $consultation = hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'request_status' => 'completed',
+    ]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters())))
+        ->toBe([(int) $consultation->request_id]);
+});
+
+it('includes a nurse consultation that is active but whose session is completed', function () {
+    $nurse = hqNurse();
+    $consultation = hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'request_status' => 'active',
+    ]);
+    ConsultationSession::create([
+        'request_id' => $consultation->request_id,
+        'physician_id' => null,
+        'consultation_status' => 'completed',
+        'assessment' => 'a', 'plan' => 'p', 'recommendations' => 'r',
+    ]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters())))
+        ->toBe([(int) $consultation->request_id]);
+});
+
+it('excludes pending, reviewed, and scheduled nurse consultations', function (string $status) {
+    $nurse = hqNurse();
+    hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'request_status' => $status,
+    ]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters())))->toBe([]);
+})->with(['pending', 'reviewed', 'scheduled']);
+
+it('applies the nurse status filter for completed, cancelled, and rejected', function (string $status) {
+    $nurse = hqNurse();
+    $match = hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'request_status' => $status,
+    ]);
+    hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'request_status' => $status === 'completed' ? 'cancelled' : 'completed',
+    ]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters(['status' => $status]))))
+        ->toBe([(int) $match->request_id]);
+})->with(['completed', 'cancelled', 'rejected']);
+
+it('falls back to all nurse history for an unrecognized status value', function () {
+    $nurse = hqNurse();
+    $completed = hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $nurse->user_id, 'request_status' => 'completed']);
+    $cancelled = hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $nurse->user_id, 'request_status' => 'cancelled']);
+
+    // normalizeFilters() is what turns raw input into 'all' — this asserts
+    // the query itself applies no clause when handed the already-normalized 'all'.
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters(['status' => 'all']))))
+        ->toEqualCanonicalizing([(int) $completed->request_id, (int) $cancelled->request_id]);
+});
+
+it('applies the nurse consultation_type filter, including inherited follow-ups', function (string $type, string $kept, string $dropped) {
+    $nurse = hqNurse();
+    $keptRow = hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $nurse->user_id, 'type' => $kept]);
+    hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $nurse->user_id, 'type' => $dropped]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters(['consultation_type' => $type]))))
+        ->toBe([(int) $keptRow->request_id]);
+})->with([
+    'follow_up' => ['follow_up', 'follow_up', 'initial'],
+    'general' => ['general', 'initial', 'follow_up'],
+]);
+
+it('applies each nurse date filter window on submitted_at', function (string $filter, int $daysAgo, bool $expected) {
+    $nurse = hqNurse();
+    $consultation = hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'submitted_at' => now()->subDays($daysAgo),
+    ]);
+
+    $ids = hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters(['date_filter' => $filter])));
+
+    expect(in_array((int) $consultation->request_id, $ids, true))->toBe($expected);
+})->with([
+    'today includes today' => ['today', 0, true],
+    'today excludes yesterday' => ['today', 1, false],
+    'last_7_days includes day 6' => ['last_7_days', 6, true],
+    'last_7_days excludes day 8' => ['last_7_days', 8, false],
+    'last_30_days includes day 29' => ['last_30_days', 29, true],
+    'last_30_days excludes day 31' => ['last_30_days', 31, false],
+    'all includes very old' => ['all', 900, true],
+]);
+
+it('searches nurse results by patient name', function (string $term) {
+    $nurse = hqNurse();
+    $match = hqConsultation([
+        'patient_id' => hqPatient(['first_name' => 'Mario', 'last_name' => 'Santos'])->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+    ]);
+    hqConsultation([
+        'patient_id' => hqPatient(['first_name' => 'Lara', 'last_name' => 'Cruz'])->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+    ]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters(['search' => $term]))))
+        ->toBe([(int) $match->request_id]);
+})->with(['Mario', 'Santos']);
+
+it('searches nurse results by physician name, not nurse name', function (string $term) {
+    $nurse = hqNurse();
+    $physician = hqPhysician(['first_name' => 'Pedro', 'last_name' => 'Reyes']);
+    $match = hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'assigned_physician_id' => $physician->user_id,
+    ]);
+    hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+    ]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters(['search' => $term]))))
+        ->toBe([(int) $match->request_id]);
+})->with(['Pedro', 'Reyes']);
+
+it('does not match nurse results by an unrelated user\'s name', function () {
+    hqPatient(['first_name' => 'Stranger', 'last_name' => 'Nobody']);
+    $nurse = hqNurse();
+    hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $nurse->user_id]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters(['search' => 'Stranger']))))
+        ->toBe([]);
+});
+
+it('orders nurse results by updated_at descending, not submitted_at', function () {
+    $nurse = hqNurse();
+    $a = hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $nurse->user_id, 'submitted_at' => now()->subDay()]);
+    $b = hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $nurse->user_id, 'submitted_at' => now()->subDays(5)]);
+
+    DB::table('consultation_requests')->where('request_id', $a->request_id)->update(['updated_at' => now()->subDays(9)]);
+    DB::table('consultation_requests')->where('request_id', $b->request_id)->update(['updated_at' => now()->subDays(2)]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters())))
+        ->toBe([(int) $b->request_id, (int) $a->request_id]);
+});
+
+it('includes a follow-up consultation that inherited assigned_nurse_id from its parent', function () {
+    $nurse = hqNurse();
+    $followUp = hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'type' => 'follow_up',
+    ]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters())))
+        ->toBe([(int) $followUp->request_id]);
+});
+
+it('eager-loads patient, physician and consultationSession for the nurse query', function () {
+    $nurse = hqNurse();
+    hqConsultation([
+        'patient_id' => hqPatient()->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+        'assigned_physician_id' => hqPhysician()->user_id,
+    ]);
+
+    $first = ConsultationHistoryQuery::forNurse((int) $nurse->user_id, hqAllFilters())->get()->first();
+
+    expect($first->relationLoaded('patient'))->toBeTrue()
+        ->and($first->relationLoaded('physician'))->toBeTrue()
+        ->and($first->relationLoaded('consultationSession'))->toBeTrue();
+});
+
+it('never lets a nurse id retrieve consultations assigned to another nurse', function () {
+    $a = hqNurse();
+    $b = hqNurse();
+    hqConsultation(['patient_id' => hqPatient()->user_id, 'assigned_nurse_id' => $b->user_id]);
+
+    expect(hqIds(ConsultationHistoryQuery::forNurse((int) $a->user_id, hqAllFilters())))->toBe([]);
+});
+
+it('still searches physician results by patient or nurse name after the $relations parameter was added', function (string $term) {
+    // Regression guard: applySearchFilter() gained a $relations parameter to
+    // support forNurse(), but forPhysician() must keep calling it with no
+    // explicit relations and get the original patient/nurse behavior.
+    $physician = hqPhysician();
+    $nurse = hqNurse(['first_name' => 'Nina', 'last_name' => 'Lopez']);
+    $match = hqConsultation([
+        'patient_id' => hqPatient(['first_name' => 'Mario', 'last_name' => 'Santos'])->user_id,
+        'assigned_physician_id' => $physician->user_id,
+        'assigned_nurse_id' => $nurse->user_id,
+    ]);
+    hqConsultation([
+        'patient_id' => hqPatient(['first_name' => 'Lara', 'last_name' => 'Cruz'])->user_id,
+        'assigned_physician_id' => $physician->user_id,
+    ]);
+
+    expect(hqIds(ConsultationHistoryQuery::forPhysician((int) $physician->user_id, hqAllFilters(['search' => $term]))))
+        ->toBe([(int) $match->request_id]);
+})->with(['Mario', 'Santos', 'Nina', 'Lopez']);
