@@ -6,23 +6,24 @@
     </x-slot>
 
     @php
+        $isPatientOnline = fn ($patient) => $patient
+            && $patient->online_status === 'online'
+            && $patient->last_seen_at
+            && $patient->last_seen_at->gt(now()->subMinutes(2));
+
         $allInboxRequests = $pendingRequests
             ->concat($assignedToCurrentNurse)
             ->concat($assignedToOtherNurses)
             ->unique('request_id')
             ->values();
 
-        $inboxRequestsJson = $allInboxRequests->map(function ($request) {
+        $inboxRequestsJson = $allInboxRequests->map(function ($request) use ($isPatientOnline) {
             return [
                 'request_id' => $request->request_id,
                 'patient_id' => $request->patient_id,
                 'patient_name' => trim(optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name) ?: 'Unknown Patient',
-                'patient_is_online' => $request->patient
-                    && $request->patient->online_status === 'online'
-                    && $request->patient->last_seen_at
-                    && $request->patient->last_seen_at->gt(now()->subMinutes(2)),
-                'concern_category' => $request->concern_category,
-                'submitted_at' => $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : null,
+                'patient_is_online' => $isPatientOnline($request->patient),
+                'submitted_at' => $request->submitted_at ? $request->submitted_at->format('M. j, Y g:i A') : null,
                 'request_status' => $request->request_status,
                 'assigned_nurse_id' => $request->assigned_nurse_id,
                 'assigned_nurse_name' => trim(optional($request->nurse)->first_name . ' ' . optional($request->nurse)->last_name) ?: null,
@@ -31,6 +32,7 @@
                 'priority_level' => $request->priority_level,
                 'symptoms_desc' => $request->symptoms_desc,
                 'online_reason' => $request->online_reason,
+                'additional_information' => $request->additional_information,
                 'file_attachments' => array_map(function ($p) use ($request) {
                     return url('/consultations/' . $request->request_id . '/attachments/' . basename($p));
                 }, $request->file_attachments ?? []),
@@ -40,13 +42,44 @@
 
     <script>
         window.inboxRequests = @json($inboxRequestsJson);
+        window.inboxRefreshUrl = @json(route('nurse.consultation_inbox.refresh', ['nurse' => $nurse->user_id]));
 
-        function consultationInbox(requests) {
+        function consultationInbox(requests, pendingCount) {
             return {
                 showModal: false,
                 selectedRequest: null,
+                previewFile: null,
                 requests: requests,
+                pendingCount: pendingCount,
                 activeTab: 'pending',
+                init() {
+                    // Matches the navbar notification bell's 30s poll (see
+                    // layouts/navigation.blade.php) rather than introducing
+                    // a new live-update pattern. Reuses the pre-existing
+                    // nurse.consultation_inbox.refresh endpoint — this page
+                    // already reloads on approve/reject, so reloading here
+                    // when a new pending request shows up is consistent
+                    // with that, not a new pattern.
+                    setInterval(() => this.checkForNewPending(), 30000);
+                },
+                checkForNewPending() {
+                    if (this.showModal) {
+                        return;
+                    }
+
+                    fetch(window.inboxRefreshUrl, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (Array.isArray(data.pendingRequests) && data.pendingRequests.length !== this.pendingCount) {
+                                window.location.reload();
+                            }
+                        })
+                        .catch(() => {
+                            // Ignore a failed check; the next tick will try again.
+                        });
+                },
                 setTab(tab) {
                     this.activeTab = tab;
                 },
@@ -57,6 +90,12 @@
                 closeModal() {
                     this.showModal = false;
                     this.selectedRequest = null;
+                },
+                openAttachmentPreview(file) {
+                    this.previewFile = file;
+                },
+                closeAttachmentPreview() {
+                    this.previewFile = null;
                 },
                 formatSeverityLabel(severity) {
                     const labels = {
@@ -180,7 +219,7 @@
         }
     </script>
 
-    <div class="py-12" x-data="consultationInbox(window.inboxRequests)" @keydown.escape.window="closeModal()">
+    <div class="py-12" x-data="consultationInbox(window.inboxRequests, {{ $pendingRequests->count() }})" @keydown.escape.window="previewFile ? closeAttachmentPreview() : closeModal()">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
@@ -205,157 +244,37 @@
 
                     <div x-show="activeTab === 'pending'" x-cloak>
                         @if($pendingRequests->isEmpty())
-                            <div class="text-gray-500">{{ __('No pending consultation requests found.') }}</div>
+                            <x-dash.empty message="No pending consultation requests found." />
                         @else
-                            <div class="overflow-x-auto">
-                                <table class="min-w-full divide-y divide-gray-200">
-                                    <thead class="bg-gray-50">
-                                        <tr>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Severity') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="bg-white divide-y divide-gray-200">
-                                        @foreach($pendingRequests as $request)
-                                            <tr>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    @php
-                                                        $symptomsDisplay = __('N/A');
-                                                        $symptomsData = $request->symptoms_desc;
-
-                                                        if (!empty($symptomsData)) {
-                                                            if (is_array($symptomsData)) {
-                                                                $symptomsDisplay = collect($symptomsData)
-                                                                    ->map(function ($item) {
-                                                                        return is_array($item) ? ($item['name'] ?? null) : $item;
-                                                                    })
-                                                                    ->filter()
-                                                                    ->implode(', ');
-                                                            } else {
-                                                                $symptomsDisplay = $symptomsData;
-                                                            }
-                                                        }
-                                                    @endphp
-                                                    {{ $symptomsDisplay }}
-                                                </td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    @php
-                                                        $highestSeverity = null;
-                                                        $severityClass = 'bg-gray-100 text-gray-700';
-                                                        $severityLabel = __('N/A');
-                                                        $symptomsData = $request->symptoms_desc;
-
-                                                        if (!empty($symptomsData) && is_array($symptomsData)) {
-                                                            $severityValues = collect($symptomsData)
-                                                                ->map(function ($item) {
-                                                                    return is_array($item) ? ($item['severity'] ?? null) : null;
-                                                                })
-                                                                ->filter(fn($value) => is_numeric($value))
-                                                                ->map(fn($value) => (int) $value)
-                                                                ->all();
-
-                                                            if (!empty($severityValues)) {
-                                                                $highestSeverity = max($severityValues);
-                                                            }
-                                                        }
-
-                                                        if ($highestSeverity === 1) {
-                                                            $severityClass = 'bg-green-100 text-green-800';
-                                                            $severityLabel = __('1 - Very Mild');
-                                                        } elseif ($highestSeverity === 2) {
-                                                            $severityClass = 'bg-yellow-100 text-yellow-800';
-                                                            $severityLabel = __('2 - Mild');
-                                                        } elseif ($highestSeverity === 3) {
-                                                            $severityClass = 'bg-orange-100 text-orange-800';
-                                                            $severityLabel = __('3 - Moderate');
-                                                        } elseif ($highestSeverity === 4) {
-                                                            $severityClass = 'bg-red-100 text-red-800';
-                                                            $severityLabel = __('4 - Severe');
-                                                        }
-                                                    @endphp
-                                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold {{ $severityClass }}">
-                                                        {{ $highestSeverity !== null ? $severityLabel : __('N/A') }}
-                                                    </span>
-                                                </td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                    @php
-                                                        $statusClasses = [
-                                                            'pending' => 'text-orange-700 bg-orange-100',
-                                                            'assigned' => 'text-yellow-700 bg-yellow-100',
-                                                            'scheduled' => 'text-brand-green-deep bg-brand-gold-soft',
-                                                            'active' => 'text-green-700 bg-green-100',
-                                                            'completed' => 'text-green-900 bg-green-100',
-                                                            'cancelled' => 'text-red-700 bg-red-100',
-                                                        ];
-                                                        $badgeClass = $statusClasses[$request->request_status] ?? 'text-gray-700 bg-gray-100';
-                                                    @endphp
-                                                    <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs {{ $badgeClass }}">
-                                                        {{ ucfirst($request->request_status) }}
-                                                    </span>
-                                                </td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-brand-green text-white text-xs font-semibold rounded-md hover:bg-brand-green-deep transition">
-                                                        {{ __('Review') }}
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        @endif
-                    </div>
-
-                    <div x-show="activeTab === 'assigned'" x-cloak class="space-y-6">
-                        <div>
-                            <h3 class="text-sm font-semibold uppercase tracking-wide text-brand-green-deep">{{ __('Assigned To Me') }}</h3>
-                            @if($assignedToCurrentNurse->isEmpty())
-                                <p class="mt-2 text-sm text-gray-500">{{ __('No consultations are currently assigned to you.') }}</p>
-                            @else
-                                <div class="mt-3 overflow-x-auto">
+                            <div class="overflow-hidden rounded-xl border border-gray-200">
+                                <div class="overflow-x-auto">
                                     <table class="min-w-full divide-y divide-gray-200">
                                         <thead class="bg-gray-50">
                                             <tr>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Symptoms') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Severity') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Priority') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Patient Name') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Severity') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Submitted At') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Status') }}</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Actions') }}</th>
                                             </tr>
                                         </thead>
-                                        <tbody class="bg-white divide-y divide-gray-200">
-                                            @foreach($assignedToCurrentNurse as $request)
-                                                <tr>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                        @php
-                                                            $symptomsDisplay = __('N/A');
-                                                            $symptomsData = $request->symptoms_desc;
-
-                                                            if (!empty($symptomsData)) {
-                                                                if (is_array($symptomsData)) {
-                                                                    $symptomsDisplay = collect($symptomsData)
-                                                                        ->map(function ($item) {
-                                                                            return is_array($item) ? ($item['name'] ?? null) : $item;
-                                                                        })
-                                                                        ->filter()
-                                                                        ->implode(', ');
-                                                                } else {
-                                                                    $symptomsDisplay = $symptomsData;
-                                                                }
-                                                            }
-                                                        @endphp
-                                                        {{ $symptomsDisplay }}
+                                        <tbody class="divide-y divide-gray-200 bg-white">
+                                            @foreach($pendingRequests as $request)
+                                                <tr class="transition hover:bg-gray-50">
+                                                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                        <div class="flex items-center gap-3">
+                                                            <div class="relative h-9 w-9 flex-shrink-0">
+                                                                <div class="flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-sm font-semibold text-white">
+                                                                    {{ strtoupper(substr(optional($request->patient)->first_name ?? '?', 0, 1)) }}
+                                                                </div>
+                                                                <span class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white {{ $isPatientOnline($request->patient) ? 'bg-emerald-500' : 'bg-gray-300' }}">
+                                                                    <span class="sr-only">{{ $isPatientOnline($request->patient) ? __('Online') : __('Offline') }}</span>
+                                                                </span>
+                                                            </div>
+                                                            <span class="font-medium text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</span>
+                                                        </div>
                                                     </td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
                                                         @php
                                                             $highestSeverity = null;
                                                             $severityClass = 'bg-gray-100 text-gray-700';
@@ -390,41 +309,16 @@
                                                                 $severityLabel = __('4 - Severe');
                                                             }
                                                         @endphp
-                                                        <span class="inline-flex items-center rounded-full px-2.5 py-1 font-semibold {{ $severityClass }}">
+                                                        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $severityClass }}">
                                                             {{ $highestSeverity !== null ? $severityLabel : __('N/A') }}
                                                         </span>
                                                     </td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                        @php
-                                                            $statusClasses = [
-                                                                'pending' => 'text-orange-700 bg-orange-100',
-                                                                'assigned' => 'text-yellow-700 bg-yellow-100',
-                                                                'scheduled' => 'text-brand-green-deep bg-brand-gold-soft',
-                                                                'active' => 'text-green-700 bg-green-100',
-                                                                'completed' => 'text-green-900 bg-green-100',
-                                                                'cancelled' => 'text-red-700 bg-red-100',
-                                                            ];
-                                                            $badgeClass = $statusClasses[$request->request_status] ?? 'text-gray-700 bg-gray-100';
-                                                        @endphp
-                                                        <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs {{ $badgeClass }}">
-                                                            {{ ucfirst($request->request_status) }}
-                                                        </span>
+                                                    <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{{ $request->submitted_at ? $request->submitted_at->format('M. j, Y g:i A') : __('Unknown') }}</td>
+                                                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                        <x-dash.badge :status="$request->request_status" size="sm" />
                                                     </td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                        @php
-                                                            $priorityClass = [
-                                                                'High' => 'text-red-700 bg-red-100',
-                                                                'Normal' => 'text-yellow-700 bg-yellow-100',
-                                                            ];
-                                                            $badgeClass = $priorityClass[$request->priority_level] ?? 'text-gray-700 bg-gray-100';
-                                                        @endphp
-                                                        <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs {{ $badgeClass }}">
-                                                            {{ ucfirst($request->priority_level) }}
-                                                        </span>
-                                                    </td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                        <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
+                                                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                        <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center rounded-lg bg-brand-green px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-green-deep">
                                                             {{ __('Review') }}
                                                         </button>
                                                     </td>
@@ -433,45 +327,163 @@
                                         </tbody>
                                     </table>
                                 </div>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div x-show="activeTab === 'assigned'" x-cloak class="space-y-6">
+                        <div>
+                            <h3 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-brand-green-deep">
+                                <span class="h-2 w-2 rounded-full bg-brand-green"></span>
+                                {{ __('Assigned To Me') }}
+                            </h3>
+                            @if($assignedToCurrentNurse->isEmpty())
+                                <div class="mt-3">
+                                    <x-dash.empty message="No consultations are currently assigned to you." />
+                                </div>
+                            @else
+                                <div class="mt-3 overflow-hidden rounded-xl border border-gray-200">
+                                    <div class="overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-gray-200">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Patient Name') }}</th>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Severity') }}</th>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Submitted At') }}</th>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Status') }}</th>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Priority') }}</th>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Actions') }}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-200 bg-white">
+                                                @foreach($assignedToCurrentNurse as $request)
+                                                    <tr class="transition hover:bg-gray-50">
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                            <div class="flex items-center gap-3">
+                                                                <div class="relative h-9 w-9 flex-shrink-0">
+                                                                    <div class="flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-sm font-semibold text-white">
+                                                                        {{ strtoupper(substr(optional($request->patient)->first_name ?? '?', 0, 1)) }}
+                                                                    </div>
+                                                                    <span class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white {{ $isPatientOnline($request->patient) ? 'bg-emerald-500' : 'bg-gray-300' }}">
+                                                                        <span class="sr-only">{{ $isPatientOnline($request->patient) ? __('Online') : __('Offline') }}</span>
+                                                                    </span>
+                                                                </div>
+                                                                <span class="font-medium text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                                                            @php
+                                                                $highestSeverity = null;
+                                                                $severityClass = 'bg-gray-100 text-gray-700';
+                                                                $severityLabel = __('N/A');
+                                                                $symptomsData = $request->symptoms_desc;
+
+                                                                if (!empty($symptomsData) && is_array($symptomsData)) {
+                                                                    $severityValues = collect($symptomsData)
+                                                                        ->map(function ($item) {
+                                                                            return is_array($item) ? ($item['severity'] ?? null) : null;
+                                                                        })
+                                                                        ->filter(fn($value) => is_numeric($value))
+                                                                        ->map(fn($value) => (int) $value)
+                                                                        ->all();
+
+                                                                    if (!empty($severityValues)) {
+                                                                        $highestSeverity = max($severityValues);
+                                                                    }
+                                                                }
+
+                                                                if ($highestSeverity === 1) {
+                                                                    $severityClass = 'bg-green-100 text-green-800';
+                                                                    $severityLabel = __('1 - Very Mild');
+                                                                } elseif ($highestSeverity === 2) {
+                                                                    $severityClass = 'bg-yellow-100 text-yellow-800';
+                                                                    $severityLabel = __('2 - Mild');
+                                                                } elseif ($highestSeverity === 3) {
+                                                                    $severityClass = 'bg-orange-100 text-orange-800';
+                                                                    $severityLabel = __('3 - Moderate');
+                                                                } elseif ($highestSeverity === 4) {
+                                                                    $severityClass = 'bg-red-100 text-red-800';
+                                                                    $severityLabel = __('4 - Severe');
+                                                                }
+                                                            @endphp
+                                                            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $severityClass }}">
+                                                                {{ $highestSeverity !== null ? $severityLabel : __('N/A') }}
+                                                            </span>
+                                                        </td>
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{{ $request->submitted_at ? $request->submitted_at->format('M. j, Y g:i A') : __('Unknown') }}</td>
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                            <x-dash.badge :status="$request->request_status" size="sm" />
+                                                        </td>
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                            <x-dash.badge :priority="$request->priority_level" size="sm" />
+                                                        </td>
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                            <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700">
+                                                                {{ __('Review') }}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             @endif
                         </div>
 
                         <div>
-                            <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-700">{{ __('Assigned To Other Nurses') }}</h3>
+                            <h3 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-700">
+                                <span class="h-2 w-2 rounded-full bg-gray-300"></span>
+                                {{ __('Assigned To Other Nurses') }}
+                            </h3>
                             @if($assignedToOtherNurses->isEmpty())
-                                <p class="mt-2 text-sm text-gray-500">{{ __('No consultations are assigned to other nurses right now.') }}</p>
+                                <div class="mt-3">
+                                    <x-dash.empty message="No consultations are assigned to other nurses right now." />
+                                </div>
                             @else
-                                <div class="mt-3 overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-gray-200">
-                                        <thead class="bg-gray-50">
-                                            <tr>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Assigned Nurse') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Submitted At') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="bg-white divide-y divide-gray-200">
-                                            @foreach($assignedToOtherNurses as $request)
+                                <div class="mt-3 overflow-hidden rounded-xl border border-gray-200">
+                                    <div class="overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-gray-200">
+                                            <thead class="bg-gray-50">
                                                 <tr>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ trim(optional($request->nurse)->first_name . ' ' . optional($request->nurse)->last_name) ?: __('Unassigned') }}</td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ $request->submitted_at ? $request->submitted_at->format('Y-m-d H:i') : __('Unknown') }}</td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                        <span class="inline-flex items-center px-2 py-1 rounded-full font-semibold text-xs text-brand-green-deep bg-brand-green-soft">
-                                                            {{ ucfirst($request->request_status) }}
-                                                        </span>
-                                                    </td>
-                                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                        <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition">
-                                                            {{ __('Review') }}
-                                                        </button>
-                                                    </td>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Patient Name') }}</th>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Assigned Nurse') }}</th>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Submitted At') }}</th>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Status') }}</th>
+                                                    <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Actions') }}</th>
                                                 </tr>
-                                            @endforeach
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-200 bg-white">
+                                                @foreach($assignedToOtherNurses as $request)
+                                                    <tr class="transition hover:bg-gray-50">
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                            <div class="flex items-center gap-3">
+                                                                <div class="relative h-9 w-9 flex-shrink-0">
+                                                                    <div class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-400 text-sm font-semibold text-white">
+                                                                        {{ strtoupper(substr(optional($request->patient)->first_name ?? '?', 0, 1)) }}
+                                                                    </div>
+                                                                    <span class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white {{ $isPatientOnline($request->patient) ? 'bg-emerald-500' : 'bg-gray-300' }}">
+                                                                        <span class="sr-only">{{ $isPatientOnline($request->patient) ? __('Online') : __('Offline') }}</span>
+                                                                    </span>
+                                                                </div>
+                                                                <span class="font-medium text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">{{ trim(optional($request->nurse)->first_name . ' ' . optional($request->nurse)->last_name) ?: __('Unassigned') }}</td>
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{{ $request->submitted_at ? $request->submitted_at->format('M. j, Y g:i A') : __('Unknown') }}</td>
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                            <x-dash.badge :status="$request->request_status" size="sm" />
+                                                        </td>
+                                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                            <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700">
+                                                                {{ __('Review') }}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             @endif
                         </div>
@@ -480,52 +492,89 @@
             </div>
         </div>
 
-        <div x-show="showModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-6">
-            <div class="flex w-[80vw] h-[80vh] sm:h-[40vw] max-h-[90vh] max-w-[72rem] min-h-[22rem] min-w-[18rem] flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-                <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-                    <div>
-                        <h3 class="text-base font-semibold text-gray-900">{{ __('Consultation Details') }}</h3>
-                        <p class="text-sm text-gray-500">{{ __('Review the selected consultation request.') }}</p>
+        <div
+            x-show="showModal"
+            x-cloak
+            @click.self="closeModal()"
+            x-transition:enter="ease-out duration-300"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="ease-in duration-200"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-3 backdrop-blur-sm sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="consultation-details-heading"
+        >
+            <div
+                x-effect="if (showModal) { $nextTick(() => $refs.modalCloseButton?.focus()); }"
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95"
+                class="flex w-[80vw] h-[80vh] sm:h-[40vw] max-h-[90vh] max-w-[72rem] min-h-[22rem] min-w-[18rem] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
+            >
+                <div class="flex items-start justify-between gap-3 border-b border-gray-200 bg-gradient-to-r from-brand-green-soft/60 via-white to-white px-4 py-3 sm:px-5 sm:py-4">
+                    <div class="flex items-center gap-3">
+                        <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-green text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75l1.5 1.5 3-3.75M9 5.25H7.5A2.25 2.25 0 005.25 7.5v11.25A2.25 2.25 0 007.5 21h9a2.25 2.25 0 002.25-2.25V7.5A2.25 2.25 0 0016.5 5.25H15M9 5.25v1.5A1.5 1.5 0 0010.5 8.25h3A1.5 1.5 0 0015 6.75v-1.5m-6 0h6" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 id="consultation-details-heading" class="text-base font-bold text-gray-900 sm:text-lg">{{ __('Consultation Details') }}</h3>
+                            <p class="text-xs text-gray-500 sm:text-sm" x-text="selectedRequest ? '{{ __('Reference') }} #' + selectedRequest.request_id : ''"></p>
+                        </div>
                     </div>
-                    <button type="button" @click="closeModal()" class="rounded-full p-1.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700">
+                    <button
+                        type="button"
+                        x-ref="modalCloseButton"
+                        @click="closeModal()"
+                        class="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-green focus:ring-offset-2"
+                    >
                         <span class="sr-only">{{ __('Close') }}</span>
-                        ✕
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
 
-                <div class="flex-1 space-y-3 overflow-y-auto p-4">
-                    <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
-                        <div>
-                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Patient Name') }}</p>
-                            <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedRequest?.patient_name"></p>
+                <div class="flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
+                    <div class="flex flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-brand-green text-lg font-semibold text-white" x-text="(selectedRequest?.patient_name || '?').charAt(0).toUpperCase()"></div>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-900" x-text="selectedRequest?.patient_name"></p>
+                                <p class="mt-0.5 inline-flex items-center gap-1.5 text-xs" :class="selectedRequest?.patient_is_online ? 'text-emerald-600' : 'text-gray-400'">
+                                    <span class="h-1.5 w-1.5 rounded-full" :class="selectedRequest?.patient_is_online ? 'bg-emerald-500' : 'bg-gray-300'"></span>
+                                    <span x-text="selectedRequest?.patient_is_online ? '{{ __('Online now') }}' : '{{ __('Offline') }}'"></span>
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Submitted At') }}</p>
-                            <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedRequest?.submitted_at ?? '{{ __('Unknown') }}'"></p>
+                        <div class="flex items-center gap-1.5 text-xs font-medium text-gray-500 sm:text-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
+                            </svg>
+                            <span x-text="selectedRequest?.submitted_at ?? '{{ __('Unknown') }}'"></span>
                         </div>
                     </div>
 
-                    <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
+                    <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-3">
                         <div>
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Request Status') }}</p>
-                            <p class="mt-1 inline-flex items-center rounded-full px-2 py-1 text-sm font-semibold" :class="requestStatusBadgeClass(selectedRequest?.request_status)" x-text="selectedRequest?.request_status ? selectedRequest.request_status.charAt(0).toUpperCase() + selectedRequest.request_status.slice(1) : '{{ __('N/A') }}'"></p>
+                            <p class="mt-1.5 inline-flex items-center rounded-full px-2 py-1 text-sm font-semibold" :class="requestStatusBadgeClass(selectedRequest?.request_status)" x-text="selectedRequest?.request_status ? selectedRequest.request_status.charAt(0).toUpperCase() + selectedRequest.request_status.slice(1) : '{{ __('N/A') }}'"></p>
                         </div>
                         <div>
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Priority Level') }}</p>
-                            <p class="mt-1 inline-flex items-center rounded-full px-2 py-1 text-sm font-semibold" :class="priorityBadgeClass(selectedRequest?.priority_level)" x-text="selectedRequest?.priority_level ? selectedRequest.priority_level.charAt(0).toUpperCase() + selectedRequest.priority_level.slice(1) : '{{ __('N/A') }}'"></p>
+                            <p class="mt-1.5 inline-flex items-center rounded-full px-2 py-1 text-sm font-semibold" :class="priorityBadgeClass(selectedRequest?.priority_level)" x-text="selectedRequest?.priority_level ? selectedRequest.priority_level.charAt(0).toUpperCase() + selectedRequest.priority_level.slice(1) : '{{ __('Not Set') }}'"></p>
                         </div>
-                    </div>
-
-                    <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
                         <div>
-                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Assigned Physician') }}</p>
-                            <p class="mt-1 text-sm font-medium text-gray-900" x-text="selectedRequest?.assigned_physician_name || '{{ __('Unassigned') }}'"></p>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text- gray-500">{{ __('Assigned Physician') }}</p>
+                            <p class="mt-1.5 text-sm font-medium text-gray-900" x-text="selectedRequest?.assigned_physician_name || '{{ __('Unassigned') }}'"></p>
                         </div>
-                    </div>
-
-                    <div class="rounded-xl border border-gray-200 p-3">
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Concern Category') }}</p>
-                        <p class="mt-2 rounded-lg bg-brand-green-soft px-3 py-2 text-sm font-medium text-brand-green-deep" x-text="selectedRequest?.concern_category ?? '{{ __('N/A') }}'"></p>
                     </div>
 
                     <div class="rounded-xl border border-gray-200 p-3">
@@ -542,34 +591,106 @@
                     </div>
 
                     <div class="rounded-xl border border-gray-200 p-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Additional Information') }}</p>
+                        <p class="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-sm leading-6 text-gray-700" x-text="selectedRequest?.additional_information || '{{ __('No additional information provided.') }}'"></p>
+                    </div>
+
+                    <div class="rounded-xl border border-gray-200 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Attachments') }}</p>
                         <template x-if="selectedRequest?.file_attachments && selectedRequest.file_attachments.length">
-                            <ul class="mt-2 space-y-2 text-sm text-gray-900">
+                            <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
                                 <template x-for="file in selectedRequest.file_attachments" :key="file">
-                                    <li class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                                        <a :href="file" target="_blank" class="font-medium text-brand-green hover:underline" x-text="file.split('/').pop()"></a>
-                                    </li>
+                                    <button
+                                        type="button"
+                                        @click="openAttachmentPreview(file)"
+                                        class="group relative h-20 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 shadow-sm transition hover:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green focus:ring-offset-2 sm:h-24"
+                                    >
+                                        <span class="sr-only" x-text="file.split('/').pop()"></span>
+                                        <img
+                                            :src="file"
+                                            :alt="file.split('/').pop()"
+                                            x-on:error="$el.style.display = 'none'; $el.nextElementSibling.style.display = 'flex';"
+                                            class="h-full w-full object-cover transition group-hover:scale-105"
+                                        >
+                                        <div class="h-full w-full items-center justify-center p-1 text-center text-[10px] text-gray-400" style="display: none;">{{ __('Image unavailable') }}</div>
+                                    </button>
                                 </template>
-                            </ul>
+                            </div>
                         </template>
                         <p class="mt-2 text-sm text-gray-500" x-show="!selectedRequest?.file_attachments || !selectedRequest.file_attachments.length">{{ __('No attachments.') }}</p>
                     </div>
                 </div>
 
-                <div class="flex flex-col gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:justify-end">
-                    <button type="button" @click="closeModal()" class="inline-flex justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100">
+                <div class="flex flex-col gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
+                    <button type="button" @click="closeModal()" class="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-green focus:ring-offset-2">
                         {{ __('Close') }}
                     </button>
                     <template x-if="selectedRequest?.request_status === 'pending'">
-                        <button type="button" @click="rejectSelectedRequest()" class="inline-flex justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700">
+                        <button type="button" @click="rejectSelectedRequest()" class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                             {{ __('Reject') }}
                         </button>
                     </template>
                     <template x-if="selectedRequest?.request_status === 'pending'">
-                        <button type="button" @click="approveSelectedRequest()" class="inline-flex justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
+                        <button type="button" @click="approveSelectedRequest()" class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75l1.5 1.5 3-3.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                             {{ __('Approve') }}
                         </button>
                     </template>
+                </div>
+            </div>
+        </div>
+
+        <div
+            x-show="previewFile"
+            x-cloak
+            @click.self="closeAttachmentPreview()"
+            x-transition:enter="ease-out duration-200"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="ease-in duration-150"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 p-3 backdrop-blur-sm sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label="{{ __('Attachment preview') }}"
+        >
+            <div
+                x-effect="if (previewFile) { $nextTick(() => $refs.previewCloseButton?.focus()); }"
+                x-transition:enter="ease-out duration-200"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="ease-in duration-150"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95"
+                class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            >
+                <div class="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+                    <p class="truncate text-sm font-semibold text-gray-900" x-text="previewFile ? previewFile.split('/').pop() : ''"></p>
+                    <button
+                        type="button"
+                        x-ref="previewCloseButton"
+                        @click="closeAttachmentPreview()"
+                        class="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-green focus:ring-offset-2"
+                    >
+                        <span class="sr-only">{{ __('Close') }}</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-auto bg-gray-100 p-2 sm:p-4">
+                    <img :src="previewFile" :alt="previewFile ? previewFile.split('/').pop() : ''" class="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg object-contain">
+                </div>
+                <div class="flex justify-end border-t border-gray-200 px-4 py-3">
+                    <a :href="previewFile" target="_blank" class="text-sm font-semibold text-brand-green hover:underline">
+                        {{ __('Open in new tab') }}
+                    </a>
                 </div>
             </div>
         </div>

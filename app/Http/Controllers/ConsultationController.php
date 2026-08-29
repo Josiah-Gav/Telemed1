@@ -215,8 +215,9 @@ class ConsultationController extends Controller
         // 2. Validate the form inputs
         $validated = $request->validate([
             'concern_category' => 'required|string|max:100',
-            'symptoms_payload' => 'required|string', 
+            'symptoms_payload' => 'required|string',
             'online_reason'    => 'required|string|max:1000',
+            'additional_notes' => 'nullable|string|max:1000',
             'attachments.*'    => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240', // 10MB Limit
         ]);
 
@@ -249,14 +250,15 @@ class ConsultationController extends Controller
         try {
             // 4. Record details using your modified database column structure
             $consultation = Consultation::create([
-                'patient_id'            => auth()->id(),
-                'assigned_physician_id' => null,
-                'assigned_nurse_id'     => null,
-                'concern_category'      => $validated['concern_category'],
-                'symptoms_desc'         => $symptomsData,
-                'online_reason'         => $validated['online_reason'] ?? null,
-                'file_attachments'      => !empty($uploadedFilesUrls) ? $uploadedFilesUrls : null, // Securely stores the remote Cloudinary cloud link array
-                'request_status'        => 'pending',
+                'patient_id'              => auth()->id(),
+                'assigned_physician_id'   => null,
+                'assigned_nurse_id'       => null,
+                'concern_category'        => $validated['concern_category'],
+                'symptoms_desc'           => $symptomsData,
+                'online_reason'           => $validated['online_reason'] ?? null,
+                'additional_information'  => $validated['additional_notes'] ?? null,
+                'file_attachments'        => !empty($uploadedFilesUrls) ? $uploadedFilesUrls : null, // Securely stores the remote Cloudinary cloud link array
+                'request_status'          => 'pending',
             ]);
 
             NotificationService::sendToRole(

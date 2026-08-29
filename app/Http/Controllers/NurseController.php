@@ -398,6 +398,7 @@ class NurseController extends Controller
                 'priority_level' => $request->priority_level,
                 'symptoms_desc' => $request->symptoms_desc,
                 'online_reason' => $request->online_reason,
+                'additional_information' => $request->additional_information,
                 'file_attachments' => array_map(function ($path) use ($request) {
                     return url('/consultations/'.$request->request_id.'/attachments/'.basename($path));
                 }, $request->file_attachments ?? []),

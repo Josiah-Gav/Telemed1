@@ -61,6 +61,7 @@ class Consultation extends Model
         'concern_category',
         'symptoms_desc',
         'online_reason',
+        'additional_information',
         'request_status',
         'priority_level',
         'file_attachments', // Added your new column here
