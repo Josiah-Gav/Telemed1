@@ -25,6 +25,7 @@ use App\Services\Export\DashboardExportRows;
 use App\Services\NotificationService;
 use App\Support\CsvDownload;
 use App\Support\DateRange;
+use App\Support\StatusBadge;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class PhysicianController extends Controller
@@ -214,25 +215,36 @@ class PhysicianController extends Controller
         $currentPhysicianId = $physician->user_id;
 
         return $consultations->map(function ($consultation) use ($currentPhysicianId) {
+            $canStart = $this->resolveCanStart($consultation->request_status, $consultation->consultationSession);
+            $severity = StatusBadge::highestSeverity($consultation->symptoms_desc);
+
             return [
                 'request_id' => $consultation->request_id,
                 'patient_name' => trim(optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name) ?: 'Unknown Patient',
                 'patient_is_online' => $this->isUserOnline($consultation->patient),
                 'assigned_nurse_name' => trim(optional($consultation->nurse)->first_name . ' ' . optional($consultation->nurse)->last_name) ?: 'Unassigned',
                 'concern_category' => $consultation->concern_category,
-                'submitted_at' => $consultation->submitted_at ? $consultation->submitted_at->format('Y-m-d H:i') : null,
+                'submitted_at' => $consultation->submitted_at ? $consultation->submitted_at->format('M. j, Y g:i A') : null,
                 'request_status' => $consultation->request_status,
                 'priority_level' => $consultation->priority_level,
                 'symptoms_desc' => $consultation->symptoms_desc,
                 'online_reason' => $consultation->online_reason,
+                'additional_information' => $consultation->additional_information,
+                // Presentation tokens are resolved server-side because the inbox
+                // table renders rows with Alpine x-for (for the AJAX refresh) and
+                // so cannot use the <x-dash.badge> Blade component per row.
+                'severity' => $severity,
+                'severity_badge' => StatusBadge::severity($severity),
+                'status_badge' => StatusBadge::status($consultation->request_status),
+                'priority_badge' => StatusBadge::priority($consultation->priority_level),
                 'reject_url' => route('physician.consultations.reject_reviewed', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
                 'start_url' => route('physician.consultations.start', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
                 'available_slots_url' => route('physician.consultations.available_slots', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
                 'schedule_url' => route('physician.consultations.schedule', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
                 'scheduled_slot' => $this->serializeScheduledSlot($consultation->consultationSession),
-                'can_start' => $this->resolveCanStart($consultation->request_status, $consultation->consultationSession)['can_start'],
-                'can_start_message' => $this->resolveCanStart($consultation->request_status, $consultation->consultationSession)['can_start_message'],
-                'file_attachments' => array_values($consultation->file_attachments ?? []),
+                'can_start' => $canStart['can_start'],
+                'can_start_message' => $canStart['can_start_message'],
+                'file_attachments' => $this->serializeAttachmentUrls($consultation),
             ];
         })->values()->all();
     }
@@ -243,6 +255,27 @@ class PhysicianController extends Controller
             && $user->online_status === 'online'
             && $user->last_seen_at
             && $user->last_seen_at->gt(now()->subMinutes(2));
+    }
+
+    /**
+     * Attachments are exposed as consultation.attachment URLs rather than the
+     * raw stored values, because a stored value may be a local disk path that
+     * is not web-reachable (see the Cloudinary fallback in CLAUDE.md). The
+     * basename is normalised exactly as AttachmentController::show does, so a
+     * Cloudinary URL carrying a query string still matches on the way back in.
+     *
+     * @return array<int, string>
+     */
+    private function serializeAttachmentUrls(Consultation $consultation): array
+    {
+        return array_values(array_map(function ($path) use ($consultation) {
+            $urlPath = parse_url($path, PHP_URL_PATH) ?: $path;
+
+            return route('consultation.attachment', [
+                'consultation' => $consultation->request_id,
+                'file' => basename($urlPath),
+            ]);
+        }, $consultation->file_attachments ?? []));
     }
 
     public function availableScheduleSlotsForConsultation(User $physician, Consultation $consultation): JsonResponse
@@ -1216,7 +1249,10 @@ class PhysicianController extends Controller
 
         return [
             'slot_id' => $slot->slot_id,
-            'slot_date' => $slotDate,
+            // Display-only, matching the inbox's "Submitted At" format. The
+            // machine-readable form is starts_at_iso; $slotDate stays Y-m-d
+            // above because the ISO string is parsed from it.
+            'slot_date' => $slot->slot_date?->format('M. j, Y') ?? $slotDate,
             'start_time' => $slot->start_time,
             'end_time' => $slot->end_time,
             'label' => $start->format('g:i A') . ' - ' . $end->format('g:i A'),

@@ -15,12 +15,19 @@ class AttachmentController extends Controller
     }
 
     /**
-     * Serve a consultation attachment to authorized nurses.
+     * Consultation request statuses that make up the physician consultation
+     * inbox's shared triage pool. PhysicianController::getConsultationInboxData
+     * deliberately applies no assigned_physician_id filter, so every physician
+     * can already see these requests and their attachments in the inbox modal.
+     */
+    private const PHYSICIAN_POOL_STATUSES = ['reviewed', 'assigned', 'scheduled'];
+
+    /**
+     * Serve a consultation attachment to the staff who are allowed to see it.
      */
     public function show(Consultation $consultation, $file)
     {
-        // Only nurses may access attachments here
-        if (Auth::user()->role !== 'nurse') {
+        if (! $this->canViewAttachments($consultation)) {
             abort(403, 'Unauthorized access.');
         }
         $attachments = $consultation->file_attachments ?? [];
@@ -54,5 +61,29 @@ class AttachmentController extends Controller
         }
 
         abort(404);
+    }
+
+    /**
+     * Nurses keep blanket access (unchanged). A physician gets access only to
+     * what their inbox already shows them: a request still in the shared triage
+     * pool, or one assigned to them personally at any status. A request that
+     * has left the pool and belongs to another physician is off limits, and so
+     * is every other role — patients included, who reach their own attachments
+     * through ConsultationController instead.
+     */
+    private function canViewAttachments(Consultation $consultation): bool
+    {
+        $user = Auth::user();
+
+        if ($user->role === 'nurse') {
+            return true;
+        }
+
+        if ($user->role !== 'physician') {
+            return false;
+        }
+
+        return (int) $consultation->assigned_physician_id === (int) $user->user_id
+            || in_array($consultation->request_status, self::PHYSICIAN_POOL_STATUSES, true);
     }
 }

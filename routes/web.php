@@ -146,7 +146,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('physician.scheduled_consultation.save');
     });
 
-    // Attachment download for consultations (nurse only access validated in controller)
+    // Attachment download for consultations (nurse/physician access validated in controller)
     Route::get('/consultations/{consultation}/attachments/{file}', [\App\Http\Controllers\AttachmentController::class, 'show'])
         ->name('consultation.attachment');
 
