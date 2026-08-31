@@ -467,7 +467,6 @@
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Scheduled Date') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Scheduled Time') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Concern Category') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Priority') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
@@ -484,7 +483,6 @@
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="formatScheduledDate(consultation.scheduled_date)"></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.scheduled_time_label ?? '—'"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.concern_category ?? '—'"></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm">
                                                 <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" :class="priorityBadgeClass(consultation.priority_level)" x-text="consultation.priority_level ?? 'Normal'"></span>
                                             </td>
@@ -542,7 +540,6 @@
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Patient Name') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Scheduled Date') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Scheduled Time') }}</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Concern Category') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Priority') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Status') }}</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ __('Actions') }}</th>
@@ -559,7 +556,6 @@
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="formatScheduledDate(consultation.scheduled_date)"></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.scheduled_time_label ?? '—'"></td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="consultation.concern_category ?? '—'"></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm">
                                                 <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" :class="priorityBadgeClass(consultation.priority_level)" x-text="consultation.priority_level ?? 'Normal'"></span>
                                             </td>

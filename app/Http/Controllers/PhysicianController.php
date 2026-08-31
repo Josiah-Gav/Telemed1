@@ -842,9 +842,27 @@ class PhysicianController extends Controller
 
         $activeConsultations->load('consultationSession');
 
+        // Computed here (not in the view) so the presence rule stays the one
+        // already used by the consultation inbox — see isUserOnline().
+        $onlinePatientIds = $activeConsultations->pluck('patient')
+            ->filter(fn (?User $patient) => $this->isUserOnline($patient))
+            ->pluck('user_id')
+            ->all();
+
+        // Same reason: serializeAttachmentUrls() is the one place that knows
+        // a stored attachment may be a Cloudinary URL or a local-disk
+        // fallback path — see its docblock. Keyed by request_id so the view
+        // can look each consultation's list up without duplicating that logic.
+        $attachmentUrlsByRequestId = $activeConsultations
+            ->mapWithKeys(fn (Consultation $consultation) => [
+                $consultation->request_id => $this->serializeAttachmentUrls($consultation),
+            ]);
+
         return view('physician.active_consultation', [
             'physician' => $physician,
             'activeConsultations' => $activeConsultations,
+            'onlinePatientIds' => $onlinePatientIds,
+            'attachmentUrlsByRequestId' => $attachmentUrlsByRequestId,
         ]);
     }
 
@@ -1277,12 +1295,8 @@ class PhysicianController extends Controller
         }
 
         $slot = $session?->slot;
-        if (!$slot || $slot->status !== 'booked') {
+        if (!$slot || !in_array($slot->status, ['booked', 'missed'], true)) {
             $message = 'Assigned slot is missing or not booked.';
-
-            if ($slot && $slot->status === 'missed') {
-                $message = 'Assigned slot has been missed. Reschedule this consultation to a new available slot.';
-            }
 
             if ($slot && $slot->status === 'completed') {
                 $message = 'Assigned slot is already completed and cannot be reused.';
@@ -1291,6 +1305,13 @@ class PhysicianController extends Controller
             return [
                 'can_start' => false,
                 'can_start_message' => $message,
+            ];
+        }
+
+        if ($slot->status === 'missed') {
+            return [
+                'can_start' => true,
+                'can_start_message' => 'Assigned slot was missed. You can start now or reschedule to a new slot.',
             ];
         }
 

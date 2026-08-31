@@ -131,22 +131,27 @@ class ConsultationOwnershipService
                     ->lockForUpdate()
                     ->first();
 
-                if (!$slot || $slot->status !== 'booked') {
+                if (!$slot || !in_array($slot->status, ['booked', 'missed'], true)) {
                     throw new \RuntimeException('The assigned schedule slot is not ready to start.');
                 }
 
-                $slotDate = $slot->slot_date?->format('Y-m-d') ?? (string) $slot->slot_date;
-                $slotStart = CarbonImmutable::parse($slotDate . ' ' . $slot->start_time);
-                $slotEnd = CarbonImmutable::parse($slotDate . ' ' . $slot->end_time);
-                $canStartAt = $slotStart->subMinutes(15);
-                $now = CarbonImmutable::now();
+                // A missed slot is by definition already past its window, so the
+                // physician can start immediately instead of being blocked by the
+                // time-window checks below (which only make sense while booked).
+                if ($slot->status === 'booked') {
+                    $slotDate = $slot->slot_date?->format('Y-m-d') ?? (string) $slot->slot_date;
+                    $slotStart = CarbonImmutable::parse($slotDate . ' ' . $slot->start_time);
+                    $slotEnd = CarbonImmutable::parse($slotDate . ' ' . $slot->end_time);
+                    $canStartAt = $slotStart->subMinutes(15);
+                    $now = CarbonImmutable::now();
 
-                if ($now->greaterThan($slotEnd)) {
-                    throw new \RuntimeException('This schedule slot window has already ended. Please reschedule this consultation to an available slot.');
-                }
+                    if ($now->greaterThan($slotEnd)) {
+                        throw new \RuntimeException('This schedule slot window has already ended. Please reschedule this consultation to an available slot.');
+                    }
 
-                if ($now->lessThan($canStartAt)) {
-                    throw new \RuntimeException('This consultation cannot be started yet.');
+                    if ($now->lessThan($canStartAt)) {
+                        throw new \RuntimeException('This consultation cannot be started yet.');
+                    }
                 }
             }
 
