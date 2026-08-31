@@ -70,7 +70,7 @@
                                     <span role="status" aria-live="polite" aria-atomic="true" class="inline-flex items-center gap-1.5">
                                         <span x-show="!peerIsTyping" class="inline-flex items-center gap-1.5">
                                             <span
-                                                class="inline-block h-[0.625em] w-[0.625em] r She's stronger than you know a harder steel starts to growshows what do you do? We should just make out for a whole episode Frank L she stole in town on each other's tongues we're not Jesus, my life would be better if we were together all this money out you and I are gonna have to bang one way or another I came to Codeland I came to Code late I was thirty I hadn't responsibilities I had people counting cook and clean for him and be at his back and call does it sound so good and you sound you're so pretty are you kidding me ah buddy is that how you see a woman we're only here to make men happy I believe I have lost my appetite not please stay seated now just excuse me I must go check on shuemy bag and you spend time with someone civilized hog and clean for him and be at his back and call that sounds so good does that sound so good you you so you are so pretty are you kidding me oh it's so long interface segregation principle nobody should be handed a remote control before buttons when they only have to scan and facts now you write a class for a cheap printer that'll be prints but the interface forces you to implement scan and facts anyway so you leave them empty or throw an error and hope no one calls them that's not an implementation that's a landline with your name on its principle scannable taxable and let each class implement only what it can actually do the basic printer implements print and moves on with its life no stuff methods no landmines no apologizing to future developers interface segregation principle nobody should be handed a remote control before buttons when they only ever press one imagine one big office machine interface with print scan and fats so there's no runs yes yes it's definitely him so if you make your games like very much could be him a thought amortician and I'm not done but please don't stop on my account twenty dollars plot subscription in under sixty seconds upload your bank transactions and get categorize budget with wasted spending flat describe an IOS app to code code it can build and test something that will generate passive income. If card design your brand I'm sorry, I'm so sorry we think that following him myself I find the ball a little grabby very hard. Oh hell yeah several meters high where it is separated into layers to release all its valium gas which, when compressed, becomes liquefied gas. The second layer is gasoline, which represents twenty percent of oil production and is the fuel we use to move around every day. Further down is cracking oil, which is not very well known, but is the raw materials like plastics and chemicals. Then comes aviation fuel designed for airplanes more stable than gasoline. The fifth layer is diesel, which represents thirty percent of oil and moves heavy trucks, excavators, and other large engines. Then there is heavy fuel oil, dense and difficult to ignite, but because of its high energy and low cost, it is the fuel for long distance ships. The seventh layer is lubricating oil, which reduces friction and improves the operation of machines. And finally, what remains at the bottom of the tower is asphalt. The material with which we pave the streets we travel every day, it is incredible everything that can be done with oil, isn't it? Did you know how many times a barrel of oil has to be processed to become the energy we use every day? The crude oil vegetarians like you do yours a few skills suddenly this is words comfortable uncomfortable. Well, I wouldn't want you to feel uncomfortable. Thanks, Akhel. This whole earth bent there's so much pressure everyone expects me to get it right away if it puts me in a really awkward position, awkward position. I think I know the feeling if I sleep I fail but if I want a cute game for a little baby savore tooth frustling cups saper toothmooseline it's hard to tell before they're giant teeth and horns grow in the to went out of here little guy you lose your morgeounded-full shrink-0"
+                                                class="inline-block h-[0.625em] w-[0.625em] rounded-full shrink-0"
                                                 :class="peerOnline ? 'bg-emerald-500' : 'bg-slate-400'"
                                                 aria-hidden="true"
                                             ></span>
@@ -124,7 +124,7 @@
                         </button>
                         <button
                             type="button"
-                            @click="activeTab = 'assessment'"
+                            @click="activeTab = 'assessment'; assessmentTabOpened = true"
                             :aria-pressed="activeTab === 'assessment'"
                             :class="activeTab === 'assessment' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
                             class="inline-flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
@@ -584,7 +584,11 @@
                                             </template>
                                             <template x-if="clinical.prescription.download_url && !selectedPrescriptionName">
                                                 <span class="inline-flex items-center gap-2">
-                                                    <template x-if="isImageFilename(clinical.prescription.file_name)">
+                                                    {{-- x-show only hides this tab, it does not stop the
+                                                         browser fetching an <img> inside it, so the
+                                                         thumbnail is not rendered at all until the tab
+                                                         has been opened at least once. --}}
+                                                    <template x-if="assessmentTabOpened && isImageFilename(clinical.prescription.file_name)">
                                                         <button
                                                             type="button"
                                                             @click="openAttachmentPreview(clinical.prescription.download_url, clinical.prescription.file_name)"
@@ -777,6 +781,16 @@
                 isSending: false,
                 isSavingClinical: false,
                 isCompletingConsultation: false,
+                // Guards so a poll cannot start while the previous one is still
+                // in flight. Without them a slow response lets 3s/4s timers stack
+                // requests on top of each other until the server catches up.
+                isFetchingMessages: false,
+                isFetchingPresence: false,
+                // Latched the first time the assessment tab is opened, so the
+                // prescription thumbnail is not requested by browsers that never
+                // open that tab, and is not re-requested on every tab switch once
+                // it has been.
+                assessmentTabOpened: false,
                 poller: null,
                 presencePoller: null,
                 typingTimeout: null,
@@ -879,6 +893,15 @@
                         return;
                     }
 
+                    // A request is already on its way; whatever it returns will be
+                    // at least as fresh as what this call would ask for, so skip
+                    // rather than queue a second one behind it.
+                    if (this.isFetchingMessages) {
+                        return;
+                    }
+
+                    this.isFetchingMessages = true;
+
                     const csrfToken = $('meta[name="csrf-token"]').attr('content');
 
                     $.ajax({
@@ -906,6 +929,11 @@
                         },
                         error: (xhr) => {
                             console.error('Failed to fetch messages:', xhr);
+                        },
+                        // complete runs on success and failure alike, so the guard
+                        // can never be left stuck on after a dropped request.
+                        complete: () => {
+                            this.isFetchingMessages = false;
                         }
                     });
                 },
@@ -1003,6 +1031,12 @@
                         return;
                     }
 
+                    if (this.isFetchingPresence) {
+                        return;
+                    }
+
+                    this.isFetchingPresence = true;
+
                     $.ajax({
                         url: this.presenceUrl,
                         method: 'GET',
@@ -1034,6 +1068,9 @@
                             }
 
                             this.presenceText = this.formatLastSeen(peer.last_seen_at);
+                        },
+                        complete: () => {
+                            this.isFetchingPresence = false;
                         }
                     });
                 },
@@ -1393,7 +1430,17 @@
                             this.draft = '';
                             this.handleDraftBlur();
                             this.clearAttachmentSelection();
-                            this.fetchMessages(true);
+
+                            // store() returns the message it just created in the
+                            // same shape index() uses, so it can go straight into
+                            // the list instead of costing a second round trip for
+                            // the whole conversation. If it is ever missing, fall
+                            // back to the original full refresh.
+                            if (data.created_message && data.created_message.message_id) {
+                                this.appendSentMessage(data.created_message);
+                            } else {
+                                this.fetchMessages(true);
+                            }
                         },
                         error: (xhr) => {
                             const message = xhr.responseJSON?.message || 'Unable to send message.';
@@ -1403,6 +1450,21 @@
                             this.isSending = false;
                         }
                     });
+                },
+                // Adds a just-sent message to the conversation without refetching
+                // it. The message_id check keeps a poll that landed first from
+                // producing a duplicate; the next poll replaces this list with the
+                // server's own copy either way, so nothing here can drift.
+                appendSentMessage(message) {
+                    const alreadyListed = this.messages.some(
+                        (existing) => Number(existing.message_id) === Number(message.message_id)
+                    );
+
+                    if (!alreadyListed) {
+                        this.messages.push(message);
+                    }
+
+                    this.$nextTick(() => this.scrollToBottom());
                 },
                 // Presentation-only helpers for the conversation view. They derive
                 // everything from the message payload the API already returns —

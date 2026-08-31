@@ -235,6 +235,11 @@ class ConsultationController extends Controller
                     $uploadResult = Cloudinary::uploadApi()->upload($file->getRealPath(), [
                         'folder' => 'telemed_consultations',
                         'resource_type' => 'auto',
+                        // Bounds a stalled upload so it cannot hold a PHP worker
+                        // for the SDK's 60-second default before the local-disk
+                        // fallback below runs. See config/cloudinary.php.
+                        'timeout' => config('cloudinary.upload_timeout'),
+                        'connect_timeout' => config('cloudinary.upload_timeout'),
                     ]);
 
                     $uploadedFilesUrls[] = $uploadResult['secure_url'] ?? ($uploadResult['url'] ?? null);

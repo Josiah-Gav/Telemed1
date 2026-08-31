@@ -22,16 +22,36 @@ class ConsultationMessageController extends Controller
 {
     private const TYPING_TTL_SECONDS = 8;
 
+    /**
+     * Disk holding message attachments and prescriptions that fell back to
+     * local storage because Cloudinary was unavailable. It is deliberately not
+     * the public disk: files there are served straight off the filesystem by
+     * the web server through the public/storage symlink, which would bypass
+     * the authorization every download action in this controller performs.
+     * See config/filesystems.php for why it is also not the "local" disk.
+     */
+    private const PRIVATE_DISK = 'message_attachments';
+
+    /**
+     * How long a browser may reuse an already-downloaded message attachment.
+     * Only applied to attachments, never to prescriptions: a prescription is
+     * served from a per-session URL whose file can be replaced in place, so
+     * caching it would risk showing a superseded prescription.
+     */
+    private const ATTACHMENT_CACHE_SECONDS = 3600;
+
     public function show(ConsultationSession $session)
     {
         $this->authorize('viewMessaging', $session);
 
+        // Messages are not eager-loaded here on purpose: the view never reads
+        // $session->messages, it fetches the conversation over AJAX from
+        // index() once Alpine boots. Loading them here only paid for rows that
+        // were immediately thrown away.
         $session->load([
             'request.patient',
             'request.nurse',
             'physician',
-            'messages.sender',
-            'messages.attachments',
         ]);
 
         return view('consultations.messaging', [
@@ -50,25 +70,8 @@ class ConsultationMessageController extends Controller
             ->with(['sender', 'attachments'])
             ->orderBy('created_at', 'asc')
             ->get()
-            ->map(function (Message $message) {
-                return [
-                    'message_id' => $message->message_id,
-                    'sender_id' => $message->sender_id,
-                    'sender_name' => trim((optional($message->sender)->first_name ?? '') . ' ' . (optional($message->sender)->last_name ?? '')),
-                    'message' => $message->message,
-                    'read_at' => optional($message->read_at)?->toIso8601String(),
-                    'created_at' => optional($message->created_at)?->toIso8601String(),
-                    'attachments' => $message->attachments->map(function ($attachment) {
-                        return [
-                            'attachment_id' => $attachment->attachment_id,
-                            'file_name' => $attachment->file_name,
-                            'mime_type' => $attachment->mime_type,
-                            'file_size' => $attachment->file_size,
-                            'download_url' => route('consultations.messaging.attachments.download', $attachment),
-                        ];
-                    })->values(),
-                ];
-            })->values();
+            ->map(fn (Message $message) => $this->serializeMessage($message))
+            ->values();
 
         return response()->json([
             'messages' => $messages,
@@ -108,6 +111,15 @@ class ConsultationMessageController extends Controller
                 $uploadResult = Cloudinary::uploadApi()->upload($file->getRealPath(), [
                     'folder' => 'message_attachments',
                     'resource_type' => 'auto',
+                    // Bounds how long a stalled Cloudinary call may hold this PHP
+                    // worker before the local-disk fallback below takes over. The
+                    // SDK's own default is 60 seconds, which is long enough for one
+                    // bad upload to block every other request on the server. These
+                    // two keys are not upload parameters — buildUploadParams()
+                    // whitelists those, so they never reach the request signature;
+                    // the SDK forwards them to its HTTP client instead.
+                    'timeout' => config('cloudinary.upload_timeout'),
+                    'connect_timeout' => config('cloudinary.upload_timeout'),
                 ]);
 
                 $storedPath = $uploadResult['secure_url'] ?? ($uploadResult['url'] ?? null);
@@ -116,7 +128,11 @@ class ConsultationMessageController extends Controller
             }
 
             if (!$storedPath) {
-                $storedPath = $file->store('message-attachments/' . $session->id, 'public');
+                // Private disk, not 'public': a fallback attachment is patient
+                // data and must only be reachable through downloadAttachment()
+                // below, which authorizes first. The relative path stored in the
+                // database is unchanged — only the disk it resolves against.
+                $storedPath = $file->store('message-attachments/' . $session->id, self::PRIVATE_DISK);
             }
 
             $message->attachments()->create([
@@ -132,9 +148,20 @@ class ConsultationMessageController extends Controller
 
         $this->notifyMessageRecipients($session, $body !== '', !empty($files));
 
+        // The sender is already known, so it is set rather than re-queried;
+        // attachments must be re-read because the relation was resolved before
+        // the rows above were created.
+        $message->setRelation('sender', Auth::user());
+        $message->load('attachments');
+
         return response()->json([
             'success' => true,
             'message' => 'Message sent successfully.',
+            // Returned under its own key so the existing string 'message' key
+            // keeps its meaning for the error path the frontend already reads.
+            // It lets the client show the sent message without refetching the
+            // whole conversation; polling still reconciles from index().
+            'created_message' => $this->serializeMessage($message),
         ]);
     }
 
@@ -186,6 +213,9 @@ class ConsultationMessageController extends Controller
                 $uploadResult = Cloudinary::uploadApi()->upload($file->getRealPath(), [
                     'folder' => 'consultation_prescriptions',
                     'resource_type' => 'auto',
+                    // Same bound as the message attachment upload above.
+                    'timeout' => config('cloudinary.upload_timeout'),
+                    'connect_timeout' => config('cloudinary.upload_timeout'),
                 ]);
 
                 $storedPath = $uploadResult['secure_url'] ?? ($uploadResult['url'] ?? null);
@@ -194,7 +224,8 @@ class ConsultationMessageController extends Controller
             }
 
             if (!$storedPath) {
-                $storedPath = $file->store('consultation-prescriptions/' . $session->id, 'public');
+                // Same private disk as message attachments, in its own directory.
+                $storedPath = $file->store('consultation-prescriptions/' . $session->id, self::PRIVATE_DISK);
             }
 
             $this->deletePrescriptionFile($session);
@@ -473,7 +504,9 @@ class ConsultationMessageController extends Controller
             return redirect()->away($session->prescription_file_path);
         }
 
-        return Storage::disk('public')->download(
+        // Authorization above has already run; only then is the private file
+        // read. Nothing here ever produces a URL to the file itself.
+        return Storage::disk(self::PRIVATE_DISK)->download(
             $session->prescription_file_path,
             $session->prescription_file_name ?? 'prescription'
         );
@@ -491,7 +524,42 @@ class ConsultationMessageController extends Controller
             return redirect()->away($attachment->file_path);
         }
 
-        return Storage::disk('public')->download($attachment->file_path, $attachment->file_name);
+        // A stored attachment is immutable: replacing a file means a new row and
+        // therefore a new URL, so the bytes behind this URL never change and the
+        // browser can safely reuse them instead of re-downloading on every render.
+        // Deliberately 'private', never 'public': this is patient data and must
+        // not sit in a shared or proxy cache. Authorization above still runs on
+        // every request that actually reaches the server, and the window is kept
+        // short so a revoked viewer's own cached copy expires quickly.
+        return Storage::disk(self::PRIVATE_DISK)->download($attachment->file_path, $attachment->file_name, [
+            'Cache-Control' => 'private, max-age=' . self::ATTACHMENT_CACHE_SECONDS,
+        ]);
+    }
+
+    /**
+     * The single shape a message takes on the wire. index() and store() both
+     * use it so a message the client appends after sending is byte-identical
+     * to the same message when polling later refetches it.
+     */
+    private function serializeMessage(Message $message): array
+    {
+        return [
+            'message_id' => $message->message_id,
+            'sender_id' => $message->sender_id,
+            'sender_name' => trim((optional($message->sender)->first_name ?? '') . ' ' . (optional($message->sender)->last_name ?? '')),
+            'message' => $message->message,
+            'read_at' => optional($message->read_at)?->toIso8601String(),
+            'created_at' => optional($message->created_at)?->toIso8601String(),
+            'attachments' => $message->attachments->map(function ($attachment) {
+                return [
+                    'attachment_id' => $attachment->attachment_id,
+                    'file_name' => $attachment->file_name,
+                    'mime_type' => $attachment->mime_type,
+                    'file_size' => $attachment->file_size,
+                    'download_url' => route('consultations.messaging.attachments.download', $attachment),
+                ];
+            })->values(),
+        ];
     }
 
     /**
@@ -599,7 +667,7 @@ class ConsultationMessageController extends Controller
             return;
         }
 
-        Storage::disk('public')->delete($session->prescription_file_path);
+        Storage::disk(self::PRIVATE_DISK)->delete($session->prescription_file_path);
     }
 
     private function typingKey(int $sessionId, int $userId): string

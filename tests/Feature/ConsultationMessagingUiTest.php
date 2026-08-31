@@ -154,8 +154,10 @@ it('wires the prescription preview popup and its image-only thumbnail gates', fu
         ->toContain('@click="openAttachmentPreview(selectedPrescriptionPreviewUrl, selectedPrescriptionName)"');
 
     // Already-saved prescription: gated on file extension since no mime_type is
-    // available for it, unlike message attachments.
-    expect($html)->toContain('x-if="isImageFilename(clinical.prescription.file_name)"')
+    // available for it, unlike message attachments, and additionally on the
+    // assessment tab having been opened — x-show hides that tab but does not
+    // stop the browser from fetching an <img> inside it.
+    expect($html)->toContain('x-if="assessmentTabOpened && isImageFilename(clinical.prescription.file_name)"')
         ->toContain('@click="openAttachmentPreview(clinical.prescription.download_url, clinical.prescription.file_name)"');
 
     // Every place that clears or replaces the pending file must revoke its
