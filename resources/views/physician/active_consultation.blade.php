@@ -45,16 +45,29 @@
                 openModal(requestId) {
                     this.selectedConsultation = this.consultations.find(consultation => consultation.request_id === requestId) || null;
                     this.showModal = !!this.selectedConsultation;
+                    // Same class components/modal.blade.php locks background
+                    // scroll with, so a fixed, centered modal doesn't leave a
+                    // scrollable page underneath it — most noticeable on mobile.
+                    if (this.showModal) {
+                        document.body.classList.add('overflow-y-hidden');
+                    }
                 },
                 closeModal() {
                     this.showModal = false;
                     this.selectedConsultation = null;
+                    document.body.classList.remove('overflow-y-hidden');
                 },
                 openAttachmentPreview(file) {
                     this.previewFile = file;
+                    document.body.classList.add('overflow-y-hidden');
                 },
                 closeAttachmentPreview() {
                     this.previewFile = null;
+                    // The details modal may still be open underneath, so only
+                    // release the lock it isn't also holding.
+                    if (!this.showModal) {
+                        document.body.classList.remove('overflow-y-hidden');
+                    }
                 },
                 attachmentName(file) {
                     return decodeURIComponent(file.split('/').pop().split('?')[0]);

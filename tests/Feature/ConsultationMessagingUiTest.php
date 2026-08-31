@@ -113,12 +113,36 @@ it('previews a sent image attachment inline in the chat bubble via the shared po
         ->getContent();
 
     // An image attachment renders as an inline <img> button that opens the
-    // popup with its real download URL; a non-image attachment keeps the
-    // existing download-row link instead.
+    // popup with its real download URL; a video attachment opens the same
+    // popup instead of navigating the tab away; any other attachment keeps
+    // the existing download-row link.
     expect($html)->toContain('x-if="attachmentIsImage(file)"')
         ->toContain('@click="openAttachmentPreview(file.download_url, file.file_name)"')
         ->toContain(':src="file.download_url"')
-        ->toContain('x-if="!attachmentIsImage(file)"');
+        ->toContain('x-if="attachmentIsVideo(file)"')
+        ->toContain('@click="openAttachmentPreview(file.download_url, file.file_name, true)"')
+        ->toContain('x-if="!attachmentIsImage(file) && !attachmentIsVideo(file)"');
+});
+
+it('opens a video attachment in the shared popup instead of navigating to it', function () {
+    ['physician' => $physician, 'session' => $session] = messagingUiScenario();
+
+    $html = $this->actingAs($physician)
+        ->get(route('consultations.messaging.show', $session))
+        ->assertOk()
+        ->getContent();
+
+    // The popup plays the video in place of the image when previewIsVideo is
+    // set, and always offers both a download link and an "open in new tab"
+    // link — clicking a video attachment must never just navigate the tab
+    // away to download it.
+    expect($html)->toContain('previewIsVideo: false')
+        ->toContain('openAttachmentPreview(url, name, isVideo = false)')
+        ->toContain('this.previewIsVideo = isVideo')
+        ->toContain('x-if="previewIsVideo"')
+        ->toContain(':src="previewFile" controls')
+        ->toContain('<a :href="previewFile" download')
+        ->toContain('<a :href="previewFile" target="_blank"');
 });
 
 it('keeps the scroll container id the auto-scroll looks up', function () {

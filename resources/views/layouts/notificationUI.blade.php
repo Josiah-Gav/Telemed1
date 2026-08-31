@@ -30,7 +30,7 @@
         x-transition:leave-start="opacity-100 scale-100"
         x-transition:leave-end="opacity-0 scale-95"
         @click.away="open = false"
-        class="absolute right-0 mt-2 w-96 max-w-[calc(100vw-2rem)] rounded-2xl border border-brand-border bg-white shadow-xl z-50"
+        class="absolute right-0 mt-2 w-[calc(100vw-3rem)] max-w-sm rounded-2xl border border-brand-border bg-white shadow-xl z-50"
     >
         <!-- Panel Header -->
         <div class="flex items-center justify-between border-b border-brand-border px-5 py-4">

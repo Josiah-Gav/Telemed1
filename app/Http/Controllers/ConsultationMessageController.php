@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 
 class ConsultationMessageController extends Controller
 {
@@ -39,6 +40,25 @@ class ConsultationMessageController extends Controller
      * caching it would risk showing a superseded prescription.
      */
     private const ATTACHMENT_CACHE_SECONDS = 3600;
+
+    /** Maximum attachments allowed on a single message. */
+    private const MAX_ATTACHMENTS_PER_MESSAGE = 3;
+
+    /** Maximum size, in megabytes, for a non-video attachment (image or document). */
+    private const MAX_FILE_SIZE_MB = 10;
+
+    /** Maximum size, in megabytes, for a video attachment. */
+    private const MAX_VIDEO_SIZE_MB = 50;
+
+    /** Maximum video attachments allowed on a single message. */
+    private const MAX_VIDEOS_PER_MESSAGE = 1;
+
+    /**
+     * Extensions accepted for a message attachment. Video is deliberately
+     * MP4-only: it is the one format both Cloudinary and every modern browser
+     * play back without transcoding, which this application does not do.
+     */
+    private const ATTACHMENT_EXTENSIONS = ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx', 'mp4'];
 
     public function show(ConsultationSession $session)
     {
@@ -82,11 +102,58 @@ class ConsultationMessageController extends Controller
     {
         $this->authorize('sendMessage', $session);
 
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
             'message' => 'nullable|string|max:2000',
-            'attachments' => 'nullable|array|max:5',
-            'attachments.*' => 'file|max:10240',
+            'attachments' => 'nullable|array|max:' . self::MAX_ATTACHMENTS_PER_MESSAGE,
+            'attachments.*' => ['file', 'mimes:' . implode(',', self::ATTACHMENT_EXTENSIONS)],
+        ], [
+            'attachments.max' => 'You can attach up to ' . self::MAX_ATTACHMENTS_PER_MESSAGE . ' files per message.',
+            'attachments.*.mimes' => 'This file type is not supported.',
         ]);
+
+        // Per-type size caps and the one-video cap can't be expressed as static
+        // rule strings (they depend on which file is being looked at), so they
+        // are checked here instead of duplicating this into a Rule class for a
+        // single call site.
+        $validator->after(function ($validator) use ($request) {
+            $videoCount = 0;
+
+            foreach ($request->file('attachments', []) as $index => $file) {
+                if (!$file->isValid()) {
+                    continue;
+                }
+
+                $isVideo = strtolower($file->getClientOriginalExtension()) === 'mp4';
+                $maxBytes = ($isVideo ? self::MAX_VIDEO_SIZE_MB : self::MAX_FILE_SIZE_MB) * 1024 * 1024;
+
+                if ($isVideo) {
+                    $videoCount++;
+                }
+
+                if ($file->getSize() > $maxBytes) {
+                    $validator->errors()->add(
+                        "attachments.$index",
+                        $isVideo
+                            ? 'This video is too large. Videos must be 50 MB or smaller.'
+                            : 'This file is too large. Images and documents must be 10 MB or smaller.'
+                    );
+                }
+            }
+
+            if ($videoCount > self::MAX_VIDEOS_PER_MESSAGE) {
+                $validator->errors()->add('attachments', 'You can attach only 1 video per message.');
+            }
+        });
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
 
         $body = trim((string) ($validated['message'] ?? ''));
         $files = $request->file('attachments', []);

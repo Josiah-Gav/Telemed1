@@ -292,8 +292,11 @@
                                                         <div>
                                                             {{-- An image attachment previews inline, like a chat image
                                                                  bubble, and opens the same click-to-zoom popup used for
-                                                                 the prescription preview. A non-image attachment has no
-                                                                 sensible inline preview, so it stays a download row. --}}
+                                                                 the prescription preview. A video opens the same popup
+                                                                 rather than navigating the tab away to play/download it —
+                                                                 the popup itself offers "open in new tab" and "download".
+                                                                 Any other attachment has no sensible inline preview, so
+                                                                 it stays a download row. --}}
                                                             <template x-if="attachmentIsImage(file)">
                                                                 <button
                                                                     type="button"
@@ -305,7 +308,21 @@
                                                                     <img :src="file.download_url" :alt="file.file_name" class="max-h-96 w-full object-cover" loading="lazy">
                                                                 </button>
                                                             </template>
-                                                            <template x-if="!attachmentIsImage(file)">
+                                                            <template x-if="attachmentIsVideo(file)">
+                                                                <button
+                                                                    type="button"
+                                                                    @click="openAttachmentPreview(file.download_url, file.file_name, true)"
+                                                                    class="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+                                                                    :class="isMine(msg) ? 'bg-brand-green-deep text-green-50 hover:bg-brand-green focus-visible:ring-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 focus-visible:ring-brand-green'"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                                                                    </svg>
+                                                                    <span class="min-w-0 flex-1 truncate" x-text="file.file_name"></span>
+                                                                    <span class="flex-shrink-0 whitespace-nowrap opacity-80" x-text="formatFileSize(file.file_size)"></span>
+                                                                </button>
+                                                            </template>
+                                                            <template x-if="!attachmentIsImage(file) && !attachmentIsVideo(file)">
                                                                 <a :href="file.download_url"
                                                                     class="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
                                                                     :class="isMine(msg) ? 'bg-brand-green-deep text-green-50 hover:bg-brand-green focus-visible:ring-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 focus-visible:ring-brand-green'">
@@ -358,6 +375,8 @@
                             </div>
                         @else
                         <form @submit.prevent="sendMessage" class="space-y-2">
+                            <!-- <p class="px-1 text-[11px] text-slate-400">Images &amp; documents up to 10 MB &middot; 1 video up to 50 MB &middot; up to 3 files per message</p> -->
+
                             {{-- Selected files sit above the bar so the composer itself keeps a
                                  stable height as files are added or cleared. --}}
                             <template x-if="selectedFiles.length">
@@ -399,7 +418,7 @@
                                      hidden inside its own label, so clicking or keyboard-
                                      activating the label opens the picker with no extra JS. --}}
                                 <label class="inline-flex h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-within:ring-2 focus-within:ring-brand-green">
-                                    <input type="file" x-ref="attachments" @change="handleAttachments" multiple class="sr-only" />
+                                    <input type="file" x-ref="attachments" @change="handleAttachments" multiple class="sr-only" accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.mp4" />
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
                                     </svg>
@@ -750,12 +769,20 @@
                     </button>
                 </div>
                 <div class="flex-1 overflow-auto bg-gray-100 p-2 sm:p-4">
-                    <img :src="previewFile" :alt="previewFileName" class="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg object-contain">
+                    <template x-if="!previewIsVideo">
+                        <img :src="previewFile" :alt="previewFileName" class="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg object-contain">
+                    </template>
+                    <template x-if="previewIsVideo">
+                        <video :src="previewFile" controls class="mx-auto max-h-[70vh] w-full rounded-lg bg-black"></video>
+                    </template>
                 </div>
-                <div class="flex justify-end border-t border-gray-200 px-4 py-3">
-                    <a :href="previewFile" target="_blank" rel="noopener noreferrer" class="text-sm font-semibold text-brand-green hover:underline">
-                        {{ __('Open in new tab') }}
+                <div class="flex items-center justify-end gap-4 border-t border-gray-200 px-4 py-3">
+                    <a :href="previewFile" download class="text-sm font-semibold text-brand-green hover:underline">
+                        {{ __('Download') }}
                     </a>
+                    <!-- <a :href="previewFile" target="_blank" rel="noopener noreferrer" class="text-sm font-semibold text-brand-green hover:underline">
+                        {{ __('Open in new tab') }}
+                    </a> -->
                 </div>
             </div>
         </div>
@@ -778,6 +805,7 @@
                 // Shared click-to-zoom popup state for the prescription preview.
                 previewFile: null,
                 previewFileName: '',
+                previewIsVideo: false,
                 isSending: false,
                 isSavingClinical: false,
                 isCompletingConsultation: false,
@@ -938,12 +966,63 @@
                     });
                 },
                 handleAttachments(event) {
-                    this.revokeSelectedFilePreviews();
                     const files = Array.from(event.target.files || []);
+                    const error = this.validateAttachmentSelection(files);
+
+                    if (error) {
+                        Swal.fire('Cannot attach files', error, 'warning');
+                        if (this.$refs.attachments) {
+                            this.$refs.attachments.value = '';
+                        }
+                        return;
+                    }
+
+                    this.revokeSelectedFilePreviews();
                     this.selectedFiles = files.map((file) => ({
                         file,
                         previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
                     }));
+                },
+                // Mirrors the server-side rules in ConsultationMessageController::store()
+                // so an obviously invalid selection is caught before upload. The server
+                // re-checks everything itself and remains the authority.
+                validateAttachmentSelection(files) {
+                    const maxFiles = 3;
+                    const maxFileMb = 10;
+                    const maxVideoMb = 50;
+                    const allowedExtensions = ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx', 'mp4'];
+
+                    if (files.length > maxFiles) {
+                        return `You can attach up to ${maxFiles} files per message.`;
+                    }
+
+                    let videoCount = 0;
+
+                    for (const file of files) {
+                        const extension = (file.name.split('.').pop() || '').toLowerCase();
+
+                        if (!allowedExtensions.includes(extension)) {
+                            return 'This file type is not supported.';
+                        }
+
+                        const isVideo = extension === 'mp4';
+                        if (isVideo) {
+                            videoCount++;
+                        }
+
+                        const maxBytes = (isVideo ? maxVideoMb : maxFileMb) * 1024 * 1024;
+                        if (file.size > maxBytes) {
+                            return isVideo
+                                ? 'This video is too large. Videos must be 50 MB or smaller.'
+                                : 'This file is too large. Images and documents must be 10 MB or smaller.';
+                        }
+                    }
+
+                    if (videoCount > 1) {
+                        return 'You can attach only 1 video per message.';
+                    }
+
+                    return null;
                 },
                 // Removes one pending file without discarding the rest of the
                 // selection. sendMessage() reads only this array, never the raw
@@ -996,14 +1075,16 @@
                 isImageFilename(name) {
                     return /\.(jpe?g|png|gif|webp)$/i.test(name || '');
                 },
-                openAttachmentPreview(url, name) {
+                openAttachmentPreview(url, name, isVideo = false) {
                     if (!url) return;
                     this.previewFile = url;
                     this.previewFileName = name || '';
+                    this.previewIsVideo = isVideo;
                 },
                 closeAttachmentPreview() {
                     this.previewFile = null;
                     this.previewFileName = '';
+                    this.previewIsVideo = false;
                 },
                 removePrescription() {
                     this.revokeSelectedPrescriptionPreview();
@@ -1506,6 +1587,9 @@
                 },
                 attachmentIsImage(file) {
                     return String(file?.mime_type || '').startsWith('image/');
+                },
+                attachmentIsVideo(file) {
+                    return String(file?.mime_type || '').startsWith('video/');
                 }
             }
         }
