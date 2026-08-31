@@ -315,7 +315,11 @@ it('leaves the existing messaging and presence markup unchanged', function () {
         ->get(route('consultations.messaging.show', $session))
         ->assertOk();
 
-    $response->assertSee('No messages yet. Start the consultation conversation.', false);
+    // The empty state was rebuilt in the messaging UI redesign (icon + heading +
+    // supporting line) so its copy changed; what this still guards is that the
+    // messaging panel and its presence wiring survive changes to the video feature.
+    $response->assertSee('Start the consultation', false);
+    $response->assertSee('No messages yet. Send the first message to', false);
     $response->assertSee('peerOnline ? \'Online\' : \'Offline\'', false);
     $response->assertSee('x-show="peerIsTyping"', false);
     $response->assertSee("presenceUrl: '".route('consultations.messaging.presence', $session)."'", false);

@@ -347,11 +347,13 @@
         </div>
     </nav>
 
-    @if(Auth::check() && Auth::user()->role === 'physician' && ! request()->routeIs('physician.active_consultation'))
+    @if(Auth::check() && Auth::user()->role === 'physician' && ! request()->routeIs('physician.active_consultation') && ! request()->routeIs('consultations.messaging.show'))
         {{-- Floating action button — the active-consultation icon moved here
              from the bottom nav row so it reads as the primary action
              rather than one item among equals. Hidden on the destination
-             page itself, and positioned clear of the fixed bottom nav. --}}
+             page itself, and positioned clear of the fixed bottom nav.
+             Also hidden on the messaging page: it would float directly over
+             the message composer, which sits in that same bottom-right area. --}}
         <a
             href="{{ route('physician.active_consultation', ['physician' => Auth::user()]) }}"
             aria-label="{{ __('Active Consultations') }}"
@@ -362,7 +364,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $navIcon['active'] }}" />
             </svg>
         </a>
-    @elseif(Auth::check() && Auth::user()->role === 'patient' && ! request()->routeIs('dashboard'))
+    @elseif(Auth::check() && Auth::user()->role === 'patient' && ! request()->routeIs('dashboard') && ! request()->routeIs('consultations.messaging.show'))
         {{-- Patients have no standalone "active consultation" page — it's
              surfaced as a card on their dashboard — so the FAB links there. --}}
         <a
