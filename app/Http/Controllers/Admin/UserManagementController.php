@@ -104,7 +104,6 @@ class UserManagementController extends Controller
             'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'role' => ['required', 'in:patient,nurse,physician,admin'],
             'clsu_id' => ['nullable', 'string', 'max:50'],
-            'user_type' => ['nullable', 'in:student,staff,faculty'],
             'department' => ['nullable', 'string', 'max:100'],
             'contact_num' => ['nullable', 'string', 'max:20'],
             'staff_position' => ['nullable', 'string', 'max:100'],
@@ -128,7 +127,9 @@ class UserManagementController extends Controller
             'email' => $validated['email'],
             'role' => $validated['role'],
             'clsu_id' => ! empty($validated['clsu_id']) ? $validated['clsu_id'] : null,
-            'user_type' => ! empty($validated['user_type']) ? $validated['user_type'] : 'staff',
+            // No form field submits this any more; every admin-created staff
+            // account is simply 'staff'.
+            'user_type' => 'staff',
             'department' => ! empty($validated['department']) ? $validated['department'] : 'General',
             'contact_num' => ! empty($validated['contact_num']) ? $validated['contact_num'] : null,
             'staff_position' => ! empty($validated['staff_position']) ? $validated['staff_position'] : null,
@@ -294,23 +295,35 @@ class UserManagementController extends Controller
     {
         $this->authorizeAdmin();
 
-        $validated = $request->validate([
+        $rules = [
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:150', 'unique:users,email,'.$user->getKey().','.$user->getKeyName()],
             'role' => ['required', 'in:patient,nurse,physician,admin'],
-            'account_status' => ['required', 'in:active,inactive'],
-            'user_type' => ['nullable', 'string', 'max:50'],
             'department' => ['nullable', 'string', 'max:100'],
             'staff_position' => ['nullable', 'string', 'max:100'],
             'specialization' => ['nullable', 'string', 'max:100'],
-        ]);
+        ];
+
+        // 'inactive' means "awaiting email verification" (a freshly invited
+        // nurse/physician who hasn't activated yet, or a freshly self-registered
+        // patient) and is set only by that verification/activation flow, never
+        // chosen by an admin. While the account is still in that state the edit
+        // form has no status field to submit at all, so nothing is required here
+        // and account_status is simply left off $validated — fill() then leaves
+        // the existing 'inactive' value untouched. Once verified, an admin may
+        // only ever toggle between active and suspended.
+        $rules['account_status'] = $user->account_status === 'inactive'
+            ? ['nullable', 'in:inactive']
+            : ['required', 'in:active,suspended'];
+
+        $validated = $request->validate($rules);
 
         // An invited account holds a random password nobody knows, so flipping
         // it active would produce an account its owner still cannot sign in to
         // while quietly skipping the activation the invitation exists to drive.
         // Judged on the stored record, never on what this request submits.
-        $activating = $validated['account_status'] === 'active' && $user->account_status !== 'active';
+        $activating = ($validated['account_status'] ?? null) === 'active' && $user->account_status !== 'active';
 
         if ($activating && $user->email_verified_at === null && in_array($user->role, self::INVITED_ROLES, true)) {
             throw ValidationException::withMessages([

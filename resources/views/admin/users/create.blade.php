@@ -48,14 +48,6 @@
                                 <input type="text" name="clsu_id" value="{{ old('clsu_id') }}" class="mt-1 w-full rounded-md border-gray-300 shadow-sm">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700">User Type</label>
-                                <select name="user_type" class="mt-1 w-full rounded-md border-gray-300 shadow-sm">
-                                    <option value="staff" {{ old('user_type', 'staff') === 'staff' ? 'selected' : '' }}>Staff</option>
-                                    <option value="faculty" {{ old('user_type') === 'faculty' ? 'selected' : '' }}>Faculty</option>
-                                    <option value="student" {{ old('user_type') === 'student' ? 'selected' : '' }}>Student</option>
-                                </select>
-                            </div>
-                            <div>
                                 <label class="block text-sm font-medium text-gray-700">Department</label>
                                 <input type="text" name="department" value="{{ old('department') }}" class="mt-1 w-full rounded-md border-gray-300 shadow-sm">
                             </div>

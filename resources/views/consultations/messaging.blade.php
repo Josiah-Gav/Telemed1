@@ -124,6 +124,18 @@
                         </button>
                         <button
                             type="button"
+                            @click="activeTab = 'patient'"
+                            :aria-pressed="activeTab === 'patient'"
+                            :class="activeTab === 'patient' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
+                            class="inline-flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21c-4.97-3.14-9-6.9-9-11.25A5.25 5.25 0 0112 5.5a5.25 5.25 0 019 4.25c0 4.35-4.03 8.11-9 11.25z" />
+                            </svg>
+                            Patient Details
+                        </button>
+                        <button
+                            type="button"
                             @click="activeTab = 'assessment'; assessmentTabOpened = true"
                             :aria-pressed="activeTab === 'assessment'"
                             :class="activeTab === 'assessment' ? 'bg-brand-green text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
@@ -532,6 +544,99 @@
                         @else
                             <p class="mt-3 text-sm text-slate-500">No attachments were uploaded for this consultation.</p>
                         @endif
+                    </div>
+                </div>
+
+                <div x-show="activeTab === 'patient'" x-cloak class="bg-brand-muted px-3 py-4 sm:px-6 sm:py-5">
+                    {{-- Placeholder only: no Hospital Information System integration exists
+                         yet. Every value below is a static "No Data" stand-in so the layout
+                         is ready for when that feed is wired up — nothing here is fetched,
+                         stored, or backed by a route. --}}
+                    <div class="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                        </svg>
+                        <span><span class="font-semibold">Not connected yet.</span> This tab is reserved for records pulled from the Hospital Information System (HIS) integration. Fields will populate automatically once that connection is built &mdash; for now they show as placeholders.</span>
+                    </div>
+
+                    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Vitals &amp; Identifiers</h4>
+                            <dl class="mt-4 grid gap-4 sm:grid-cols-2">
+                                <div>
+                                    <dt class="text-xs font-medium text-slate-500">Blood Type</dt>
+                                    <dd class="mt-1 text-sm font-semibold text-slate-400">No Data</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs font-medium text-slate-500">Height</dt>
+                                    <dd class="mt-1 text-sm font-semibold text-slate-400">No Data</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs font-medium text-slate-500">Weight</dt>
+                                    <dd class="mt-1 text-sm font-semibold text-slate-400">No Data</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs font-medium text-slate-500">BMI</dt>
+                                    <dd class="mt-1 text-sm font-semibold text-slate-400">No Data</dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Emergency Contact</h4>
+                            <dl class="mt-4 grid gap-4 sm:grid-cols-2">
+                                <div>
+                                    <dt class="text-xs font-medium text-slate-500">Name</dt>
+                                    <dd class="mt-1 text-sm font-semibold text-slate-400">No Data</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs font-medium text-slate-500">Relationship</dt>
+                                    <dd class="mt-1 text-sm font-semibold text-slate-400">No Data</dd>
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <dt class="text-xs font-medium text-slate-500">Contact Number</dt>
+                                    <dd class="mt-1 text-sm font-semibold text-slate-400">No Data</dd>
+                                </div>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Known Allergies</h4>
+                            <p class="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-400">No Data</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Chronic Illnesses / Conditions</h4>
+                            <p class="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-400">No Data</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Current Medications</h4>
+                            <p class="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-400">No Data</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Past Injuries / Surgeries</h4>
+                            <p class="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-400">No Data</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Immunization History</h4>
+                            <p class="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-400">No Data</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Family Medical History</h4>
+                            <p class="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-400">No Data</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                        <div class="flex items-center justify-between gap-3">
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">HIS Sync Status</h4>
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                                <span class="inline-block h-2 w-2 rounded-full bg-slate-400" aria-hidden="true"></span>
+                                Not connected
+                            </span>
+                        </div>
+                        <p class="mt-2 text-sm text-slate-400">Last synced: No Data</p>
                     </div>
                 </div>
 

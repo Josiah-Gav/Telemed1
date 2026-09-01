@@ -250,15 +250,32 @@ test('user editing still works', function () {
         'last_name' => 'Name',
         'email' => $target->email,
         'role' => 'patient',
-        'account_status' => 'inactive',
+        'account_status' => 'suspended',
         'department' => 'Nursing',
     ])->assertSessionHasNoErrors()->assertRedirect(route('admin.users.index'));
 
     $target->refresh();
 
     expect($target->first_name)->toBe('Edited')
-        ->and($target->account_status)->toBe('inactive')
+        ->and($target->account_status)->toBe('suspended')
         ->and($target->department)->toBe('Nursing');
+});
+
+test('an admin cannot set an active account to inactive', function () {
+    // 'inactive' means "awaiting email verification" and is only ever set by
+    // the registration/activation flow itself. An admin choosing to disable an
+    // already-verified account must use 'suspended' instead.
+    $target = User::factory()->create(['role' => 'patient', 'account_status' => 'active']);
+
+    $this->actingAs(admin())->put(route('admin.users.update', $target), [
+        'first_name' => $target->first_name,
+        'last_name' => $target->last_name,
+        'email' => $target->email,
+        'role' => 'patient',
+        'account_status' => 'inactive',
+    ])->assertSessionHasErrors('account_status');
+
+    expect($target->fresh()->account_status)->toBe('active');
 });
 
 test('editing an invited nurse does not silently verify them', function () {

@@ -37,14 +37,18 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Account Status</label>
-                                <select name="account_status" class="mt-1 w-full rounded-md border-gray-300 shadow-sm">
-                                    <option value="active" {{ old('account_status', $user->account_status) === 'active' ? 'selected' : '' }}>Active</option>
-                                    <option value="inactive" {{ old('account_status', $user->account_status) === 'inactive' ? 'selected' : '' }}>Inactive</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">User Type</label>
-                                <input type="text" name="user_type" value="{{ old('user_type', $user->user_type) }}" class="mt-1 w-full rounded-md border-gray-300 shadow-sm">
+                                @if($user->account_status === 'inactive')
+                                    {{-- Not an admin choice: this account is still waiting on the
+                                         invited staff member's own activation link (or, for a
+                                         patient, on email verification). It becomes editable —
+                                         Active or Suspended — automatically once that happens. --}}
+                                    <input type="text" value="Inactive &mdash; awaiting email verification" disabled class="mt-1 w-full rounded-md border-gray-200 bg-gray-100 text-gray-500 shadow-sm">
+                                @else
+                                    <select name="account_status" class="mt-1 w-full rounded-md border-gray-300 shadow-sm">
+                                        <option value="active" {{ old('account_status', $user->account_status) === 'active' ? 'selected' : '' }}>Active</option>
+                                        <option value="suspended" {{ old('account_status', $user->account_status) === 'suspended' ? 'selected' : '' }}>Suspend</option>
+                                    </select>
+                                @endif
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Department</label>
