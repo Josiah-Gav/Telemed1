@@ -213,7 +213,8 @@ class DashboardController extends Controller
 
     private function getPatientFollowUpStatus(int $patientId): array
     {
-        $followUpRequest = FollowUpRequest::where('patient_id', $patientId)
+        $followUpRequest = FollowUpRequest::with('consultation.request')
+            ->where('patient_id', $patientId)
             ->latest('updated_at')
             ->first();
 
@@ -228,6 +229,8 @@ class DashboardController extends Controller
             ];
         }
 
+        $originalRequest = optional($followUpRequest->consultation)->request;
+
         return [
             'request_id' => $followUpRequest->id,
             'exists' => true,
@@ -236,6 +239,7 @@ class DashboardController extends Controller
             'status_badge_class' => $this->getFollowUpStatusBadgeClass($followUpRequest->status),
             'updated_at' => optional($followUpRequest->updated_at)->format('M d, Y'),
             'decision_notes' => $followUpRequest->decision_notes,
+            'details_url' => $originalRequest ? route('consultations.show', $originalRequest) : null,
         ];
     }
 

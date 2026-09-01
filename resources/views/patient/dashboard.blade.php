@@ -206,7 +206,11 @@
             </div>
 
             @if($followUpStatus['exists'] && in_array($followUpStatus['status'], ['pending', 'forwarded'], true))
-                <div class="mt-6 rounded-3xl border border-gray-200 bg-white shadow-sm">
+                @php $followUpCardTag = $followUpStatus['details_url'] ? 'a' : 'div'; @endphp
+                <{{ $followUpCardTag }}
+                    @if($followUpStatus['details_url']) href="{{ $followUpStatus['details_url'] }}" @endif
+                    class="mt-6 block rounded-3xl border border-gray-200 bg-white shadow-sm {{ $followUpStatus['details_url'] ? 'transition hover:border-blue-300 hover:shadow-lg' : '' }}"
+                >
                     <div class="p-6 sm:p-8">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
@@ -219,9 +223,14 @@
                             <div class="flex items-center gap-2">
                                 <span class="{{ $followUpStatus['status_badge_class'] }}">{{ $followUpStatus['status_label'] }}</span>
                                 @if(in_array($followUpStatus['status'], ['pending', 'forwarded'], true))
-                                    <button type="button" data-cancel-url="{{ route('patient.follow_up_requests.cancel', ['followUpRequest' => $followUpStatus['request_id']]) }}" onclick="cancelFollowUpRequest(this)" class="inline-flex items-center justify-center rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500">
+                                    <button type="button" data-cancel-url="{{ route('patient.follow_up_requests.cancel', ['followUpRequest' => $followUpStatus['request_id']]) }}" onclick="event.stopPropagation(); event.preventDefault(); cancelFollowUpRequest(this)" class="inline-flex items-center justify-center rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500">
                                         Cancel Request
                                     </button>
+                                @endif
+                                @if($followUpStatus['details_url'])
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                                    </svg>
                                 @endif
                             </div>
                         </div>
@@ -237,7 +246,7 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </{{ $followUpCardTag }}>
             @endif
 
             <div class="mt-6" x-show="physicianFollowUp" x-cloak>

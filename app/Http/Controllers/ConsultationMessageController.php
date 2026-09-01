@@ -568,7 +568,7 @@ class ConsultationMessageController extends Controller
         abort_unless($session->prescription_file_path, 404);
 
         if (is_string($session->prescription_file_path) && str_starts_with($session->prescription_file_path, 'http')) {
-            return redirect()->away($session->prescription_file_path);
+            return redirect()->away($this->forceCloudinaryDownload($session->prescription_file_path));
         }
 
         // Authorization above has already run; only then is the private file
@@ -577,6 +577,18 @@ class ConsultationMessageController extends Controller
             $session->prescription_file_path,
             $session->prescription_file_name ?? 'prescription'
         );
+    }
+
+    /**
+     * Cloudinary serves a plain secure_url with Content-Disposition: inline, so
+     * the browser opens the file (a PDF, say) in a new tab instead of downloading
+     * it. Cloudinary's own "fl_attachment" delivery flag switches that header to
+     * attachment; every secure_url contains exactly one "/upload/" delivery-type
+     * segment to insert it after, regardless of resource type (image/video/raw).
+     */
+    private function forceCloudinaryDownload(string $url): string
+    {
+        return preg_replace('#/upload/#', '/upload/fl_attachment/', $url, 1) ?? $url;
     }
 
     public function downloadAttachment(\App\Models\MessageAttachment $attachment)

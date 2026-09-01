@@ -5,7 +5,7 @@
         </h2>
     </x-slot>
 
-    <div class="py-12">
+    <div class="py-12" x-data="{ previewFile: null }" @keydown.escape.window="previewFile = null">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 bg-white border-b border-gray-200">
@@ -80,11 +80,22 @@
                         @if(!empty($consultation->file_attachments))
                             <div class="rounded-3xl border border-gray-200 bg-white p-6">
                                 <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Attachments</p>
-                                <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                                     @foreach($consultation->file_attachments as $attachment)
-                                        <a href="{{ $attachment }}" target="_blank" class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-medium text-slate-900 hover:bg-slate-100 transition">
-                                            View attachment
-                                        </a>
+                                        <button
+                                            type="button"
+                                            @click="previewFile = @js($attachment)"
+                                            class="group relative h-24 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm transition hover:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green focus:ring-offset-2"
+                                        >
+                                            <span class="sr-only">{{ __('View attachment') }}</span>
+                                            <img
+                                                src="{{ $attachment }}"
+                                                alt="{{ __('Attachment preview') }}"
+                                                x-on:error="$el.style.display = 'none'; $el.nextElementSibling.style.display = 'flex';"
+                                                class="h-full w-full object-cover transition group-hover:scale-105"
+                                            >
+                                            <div class="h-full w-full items-center justify-center p-1 text-center text-[10px] text-slate-400" style="display: none;">{{ __('Image unavailable') }}</div>
+                                        </button>
                                     @endforeach
                                 </div>
                             </div>
@@ -127,6 +138,54 @@
                             <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-brand-green px-6 py-3 text-sm font-semibold text-white hover:bg-brand-green-deep">Back to Dashboard</a>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div
+            x-show="previewFile"
+            x-cloak
+            @click.self="previewFile = null"
+            x-transition:enter="ease-out duration-200"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="ease-in duration-150"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 p-3 backdrop-blur-sm sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label="{{ __('Attachment preview') }}"
+        >
+            <div
+                x-transition:enter="ease-out duration-200"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="ease-in duration-150"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95"
+                class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            >
+                <div class="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+                    <p class="truncate text-sm font-semibold text-gray-900" x-text="previewFile ? previewFile.split('/').pop() : ''"></p>
+                    <button
+                        type="button"
+                        @click="previewFile = null"
+                        class="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-green focus:ring-offset-2"
+                    >
+                        <span class="sr-only">{{ __('Close') }}</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-auto bg-gray-100 p-2 sm:p-4">
+                    <img :src="previewFile" :alt="previewFile ? previewFile.split('/').pop() : ''" class="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg object-contain">
+                </div>
+                <div class="flex justify-end border-t border-gray-200 px-4 py-3">
+                    <a :href="previewFile" target="_blank" class="text-sm font-semibold text-brand-green hover:underline">
+                        {{ __('Open in new tab') }}
+                    </a>
                 </div>
             </div>
         </div>
