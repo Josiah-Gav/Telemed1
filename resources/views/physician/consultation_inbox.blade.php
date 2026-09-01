@@ -186,6 +186,49 @@
                         }
                     });
                 },
+                takeOverConsultation() {
+                    if (!this.selectedConsultation?.takeover_url) {
+                        Swal.fire('Error', 'Unable to find the takeover URL.', 'error');
+                        return;
+                    }
+
+                    const csrfToken = $('meta[name="csrf-token"]').attr('content');
+                    if (!csrfToken) {
+                        Swal.fire('Error', 'Missing CSRF token.', 'error');
+                        return;
+                    }
+
+                    $.ajax({
+                        url: this.selectedConsultation.takeover_url,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken
+                        },
+                        dataType: 'json',
+                        success: (data) => {
+                            if (data.success) {
+                                Swal.fire({
+                                    title: 'Consultation Claimed',
+                                    text: data.message,
+                                    icon: 'success',
+                                    confirmButtonText: 'OK'
+                                }).then(() => {
+                                    window.location.reload();
+                                });
+                            } else {
+                                Swal.fire('Error', data.message || 'Something went wrong.', 'error');
+                            }
+                        },
+                        // A 422 here is the normal outcome when someone else claimed it
+                        // first, or the grace period has not elapsed on the server's
+                        // clock — show the server's reason verbatim.
+                        error: (xhr) => {
+                            const message = xhr.responseJSON?.message || 'Could not take over the consultation.';
+                            Swal.fire('Unavailable', message, 'warning');
+                        }
+                    });
+                },
                 scheduleConsultation(slotId) {
                     if (!this.selectedConsultation?.schedule_url) {
                         Swal.fire('Error', 'Unable to find the schedule URL.', 'error');
@@ -403,7 +446,14 @@
                                                 <span x-show="!consultation.scheduled_slot" class="text-gray-400">&mdash;</span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500" x-text="consultation.submitted_at ?? '{{ __('Unknown') }}'"></td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm" x-html="badgeHtml(consultation.status_badge)"></td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                <div x-html="badgeHtml(consultation.status_badge)"></div>
+                                                <p x-show="consultation.takeover_available" x-cloak class="mt-1 text-[11px] font-semibold text-amber-700">{{ __('Takeover Available') }}</p>
+                                                <p x-show="!consultation.takeover_available && !consultation.is_assigned_to_me && consultation.assigned_physician_name"
+                                                   x-cloak
+                                                   class="mt-1 text-[11px] text-gray-500"
+                                                   x-text="'{{ __('Assigned to') }} ' + consultation.assigned_physician_name"></p>
+                                            </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm" x-html="badgeHtml(consultation.priority_badge)"></td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm">
                                                 <button type="button" @click="openModal(consultation.request_id)"
@@ -492,7 +542,7 @@
                         </div>
                     </div>
 
-                    <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-3">
+                    <div class="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-4">
                         <div>
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Request Status') }}</p>
                             <div class="mt-1.5" x-html="badgeHtml(selectedConsultation?.status_badge, 'md')"></div>
@@ -505,7 +555,39 @@
                             <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Assigned Nurse') }}</p>
                             <p class="mt-1.5 text-sm font-medium text-gray-900" x-text="selectedConsultation?.assigned_nurse_name || '{{ __('Unassigned') }}'"></p>
                         </div>
+                        {{-- Physician Takeover: who currently owns this consultation, and
+                             (once it has changed hands) who it was scheduled to. Both names
+                             come from the server so this panel cannot disagree with the
+                             assignment the takeover transaction actually wrote. --}}
+                        <div>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Assigned Physician') }}</p>
+                            <p class="mt-1.5 text-sm font-medium text-gray-900" x-text="selectedConsultation?.assigned_physician_name || '{{ __('Unassigned') }}'"></p>
+                            <p x-show="selectedConsultation?.is_assigned_to_me" x-cloak class="text-[11px] font-semibold text-emerald-600">{{ __('You') }}</p>
+                            <p x-show="selectedConsultation?.was_taken_over && selectedConsultation?.original_physician_name"
+                               x-cloak
+                               class="mt-0.5 text-[11px] text-gray-500"
+                               x-text="'{{ __('Originally') }}: ' + selectedConsultation.original_physician_name"></p>
+                        </div>
                     </div>
+
+                    {{-- Takeover status banner. takeover_available is decided server-side
+                         from the slot's start time plus the grace period; this block only
+                         renders the answer. --}}
+                    <template x-if="selectedConsultation && !selectedConsultation.is_assigned_to_me && selectedConsultation.takeover_message">
+                        <div class="rounded-xl border p-3"
+                             :class="selectedConsultation.takeover_available ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50'">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em]"
+                               :class="selectedConsultation.takeover_available ? 'text-amber-700' : 'text-gray-500'"
+                               x-text="selectedConsultation.takeover_available ? '{{ __('Takeover Available') }}' : '{{ __('Assignment') }}'"></p>
+                            <p class="mt-1.5 text-sm"
+                               :class="selectedConsultation.takeover_available ? 'text-amber-900' : 'text-gray-700'"
+                               x-text="selectedConsultation.takeover_message"></p>
+                            <p x-show="selectedConsultation.takeover_available && selectedConsultation.waiting_minutes !== null"
+                               x-cloak
+                               class="mt-1 text-xs font-medium text-amber-800"
+                               x-text="'{{ __('Patient waiting') }}: ' + selectedConsultation.waiting_minutes + ' {{ __('min') }}'"></p>
+                        </div>
+                    </template>
 
                     <div class="rounded-xl border border-gray-200 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">{{ __('Scheduled Slot') }}</p>
@@ -579,7 +661,33 @@
                         <button type="button" @click="closeModal()" class="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-green focus:ring-offset-2">
                             {{ __('Close') }}
                         </button>
-                        <template x-if="selectedConsultation?.request_status === 'reviewed'">
+                        {{-- Physician Takeover: another physician's consultation offers only
+                             the Claim action. The backend refuses these three regardless —
+                             hiding them just stops the physician firing a request that can
+                             only 422. --}}
+                        <template x-if="selectedConsultation?.takeover_available">
+                            <button type="button" @click="Swal.fire({
+                                title: 'Claim Consultation',
+                                text: 'The assigned physician has not started this consultation. Take over as the responsible physician?',
+                                icon: 'question',
+                                showCancelButton: true,
+                                confirmButtonColor: '#d97706',
+                                cancelButtonColor: '#6b7280',
+                                confirmButtonText: 'Yes, claim it',
+                                cancelButtonText: 'Cancel'
+                            }).then((result) => {
+                                if (result.isConfirmed) {
+                                    takeOverConsultation();
+                                }
+                            })"
+                            class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                                </svg>
+                                {{ __('Claim Consultation') }}
+                            </button>
+                        </template>
+                        <template x-if="selectedConsultation?.is_actionable_by_me && selectedConsultation?.request_status === 'reviewed'">
                             <button type="button" @click="Swal.fire({
                                 title: 'Reject Consultation',
                                 text: 'Please provide a reason for rejecting this consultation.',
@@ -610,7 +718,7 @@
                                 {{ __('Reject') }}
                             </button>
                         </template>
-                        <template x-if="selectedConsultation && ['reviewed', 'assigned', 'scheduled'].includes(selectedConsultation.request_status)">
+                        <template x-if="selectedConsultation?.is_actionable_by_me && ['reviewed', 'assigned', 'scheduled'].includes(selectedConsultation.request_status)">
                             <button type="button" @click="promptScheduleSlot()"
                             class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand-green px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-green-deep focus:outline-none focus:ring-2 focus:ring-brand-green focus:ring-offset-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
@@ -619,7 +727,7 @@
                                 {{ __('Schedule') }}
                             </button>
                         </template>
-                        <template x-if="selectedConsultation && ['reviewed', 'assigned', 'scheduled'].includes(selectedConsultation.request_status)">
+                        <template x-if="selectedConsultation?.is_actionable_by_me && ['reviewed', 'assigned', 'scheduled'].includes(selectedConsultation.request_status)">
                             <button type="button"
                             :disabled="!selectedConsultation.can_start"
                             :title="selectedConsultation.can_start ? '' : selectedConsultation.can_start_message"

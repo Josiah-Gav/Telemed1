@@ -11,6 +11,18 @@ use Illuminate\Support\Facades\DB;
 
 class ConsultationOwnershipService
 {
+    /**
+     * Physician Takeover grace period, in minutes after a consultation's
+     * scheduled slot start. A consultation scheduled for 2:00 PM whose
+     * assigned physician has not started it becomes claimable at 2:10 PM.
+     *
+     * Deliberately a constant rather than config: this codebase already
+     * expresses its one other scheduling window (the 15-minute early-start
+     * allowance below) the same way, and a single value does not earn the
+     * project's first config file.
+     */
+    public const TAKEOVER_GRACE_MINUTES = 10;
+
     public function claimByNurse(int $consultationRequestId, int $nurseId, string $priorityLevel): Consultation
     {
         return DB::transaction(function () use ($consultationRequestId, $nurseId, $priorityLevel) {
@@ -127,18 +139,29 @@ class ConsultationOwnershipService
 
                 $slot = ScheduleSlot::query()
                     ->where('slot_id', $session->slot_id)
-                    ->where('physician_id', $physicianId)
                     ->lockForUpdate()
                     ->first();
 
-                if (!$slot || !in_array($slot->status, ['booked', 'missed'], true)) {
+                // The slot's physician_id is never rewritten by a takeover — it
+                // records who the consultation was *scheduled* to. So the slot is
+                // matched either by owning it outright (the ordinary case) or by
+                // having claimed this consultation through Physician Takeover.
+                $claimedByTakeover = (int) $session->taken_over_by_physician_id === $physicianId;
+                $ownsSlot = $slot && (int) $slot->physician_id === $physicianId;
+
+                if (!$slot || !($ownsSlot || $claimedByTakeover) || !in_array($slot->status, ['booked', 'missed'], true)) {
                     throw new \RuntimeException('The assigned schedule slot is not ready to start.');
                 }
 
                 // A missed slot is by definition already past its window, so the
                 // physician can start immediately instead of being blocked by the
                 // time-window checks below (which only make sense while booked).
-                if ($slot->status === 'booked') {
+                //
+                // A taken-over slot is skipped for the same reason: takeOverByPhysician
+                // only hands the consultation over once slot start + the grace period
+                // has passed, so the "too early"/"window ended" guards — which exist to
+                // hold the *scheduled* physician to their slot — no longer apply.
+                if ($slot->status === 'booked' && !$claimedByTakeover) {
                     $slotDate = $slot->slot_date?->format('Y-m-d') ?? (string) $slot->slot_date;
                     $slotStart = CarbonImmutable::parse($slotDate . ' ' . $slot->start_time);
                     $slotEnd = CarbonImmutable::parse($slotDate . ' ' . $slot->end_time);
@@ -169,6 +192,127 @@ class ConsultationOwnershipService
             return [
                 'consultation' => $consultation->fresh(),
                 'session' => $session->fresh(),
+            ];
+        });
+    }
+
+    /**
+     * The moment a scheduled consultation becomes claimable by another
+     * physician: its slot's start time plus the grace period.
+     *
+     * Exposed publicly (and derived from nothing but the slot) so the
+     * physician inbox can render the same boundary the transaction below
+     * enforces — the two can never drift apart.
+     */
+    public static function takeoverEligibleAt(ScheduleSlot $slot): CarbonImmutable
+    {
+        $slotDate = $slot->slot_date?->format('Y-m-d') ?? (string) $slot->slot_date;
+
+        return CarbonImmutable::parse($slotDate . ' ' . $slot->start_time)
+            ->addMinutes(self::TAKEOVER_GRACE_MINUTES);
+    }
+
+    /**
+     * Physician Takeover: another physician claims a scheduled consultation
+     * whose assigned physician has not started it within the grace period.
+     *
+     * No status changes — the consultation stays 'scheduled' on both tables
+     * and simply changes hands. What moves is the assignment (written to both
+     * consultation_requests.assigned_physician_id and consultations.
+     * physician_id in this one transaction, so they can never disagree) plus
+     * the three takeover audit columns. The schedule slot is deliberately left
+     * completely untouched: its physician_id keeps recording who the
+     * consultation was originally scheduled to.
+     *
+     * Concurrency: the consultation_requests row is locked before the
+     * assignment is read, so two physicians claiming simultaneously serialise
+     * here. The loser re-reads after the winner commits, sees taken_over_at
+     * already set, and is refused — V1 allows exactly one claim per
+     * consultation, which is also what stops a second takeover overwriting
+     * original_physician_id with the first claimant.
+     */
+    public function takeOverByPhysician(int $consultationRequestId, int $claimingPhysicianId): array
+    {
+        return DB::transaction(function () use ($consultationRequestId, $claimingPhysicianId) {
+            $consultation = Consultation::query()
+                ->where('request_id', $consultationRequestId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            // Excludes active, completed, cancelled and rejected in one check:
+            // only a still-scheduled consultation can be taken over.
+            if ($consultation->request_status !== 'scheduled') {
+                throw new \RuntimeException('Only scheduled consultations that have not started can be taken over.');
+            }
+
+            $session = ConsultationSession::query()
+                ->where('request_id', $consultation->request_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$session) {
+                throw new \RuntimeException('This consultation has no session to take over.');
+            }
+
+            // Checked before the "is it already mine" test below so that both
+            // sides of a concurrent claim get the same honest answer.
+            if ($session->taken_over_at !== null) {
+                throw new \RuntimeException('This consultation has already been claimed by another physician.');
+            }
+
+            $originalPhysicianId = (int) ($consultation->assigned_physician_id ?? 0);
+
+            if ($originalPhysicianId <= 0) {
+                throw new \RuntimeException('This consultation has no assigned physician to take over from.');
+            }
+
+            if ($originalPhysicianId === $claimingPhysicianId) {
+                throw new \RuntimeException('This consultation is already assigned to you.');
+            }
+
+            if ($session->consultation_status !== 'scheduled' || $session->started_at !== null) {
+                throw new \RuntimeException('This consultation has already been started and can no longer be taken over.');
+            }
+
+            if (!$session->slot_id) {
+                throw new \RuntimeException('This consultation has no assigned schedule slot yet.');
+            }
+
+            $slot = ScheduleSlot::query()
+                ->where('slot_id', $session->slot_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$slot || !in_array($slot->status, ['booked', 'missed'], true)) {
+                throw new \RuntimeException('The scheduled slot for this consultation is no longer valid.');
+            }
+
+            $eligibleAt = self::takeoverEligibleAt($slot);
+
+            if (CarbonImmutable::now()->lessThan($eligibleAt)) {
+                throw new \RuntimeException(
+                    'This consultation cannot be taken over until ' . $eligibleAt->format('M d, Y h:i A') . '.'
+                );
+            }
+
+            $consultation->update([
+                'assigned_physician_id' => $claimingPhysicianId,
+            ]);
+
+            $session->update([
+                'physician_id' => $claimingPhysicianId,
+                // Never overwritten on a later takeover — the guard above makes
+                // a second claim impossible, and the ?? keeps that intent explicit.
+                'original_physician_id' => $session->original_physician_id ?? $originalPhysicianId,
+                'taken_over_by_physician_id' => $claimingPhysicianId,
+                'taken_over_at' => now(),
+            ]);
+
+            return [
+                'consultation' => $consultation->fresh(),
+                'session' => $session->fresh(),
+                'slot' => $slot->fresh(),
+                'original_physician_id' => $originalPhysicianId,
             ];
         });
     }

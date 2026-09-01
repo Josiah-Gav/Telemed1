@@ -18,6 +18,9 @@ class ConsultationSession extends Model
     protected $fillable = [
         'request_id',
         'physician_id',
+        'original_physician_id',
+        'taken_over_by_physician_id',
+        'taken_over_at',
         'slot_id',
         'follow_up_request_id',
         'consultation_status',
@@ -42,6 +45,7 @@ class ConsultationSession extends Model
         'follow_up_date' => 'date',
         'prescription_file_size' => 'integer',
         'assigned_at' => 'datetime',
+        'taken_over_at' => 'datetime',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
     ];
@@ -54,6 +58,31 @@ class ConsultationSession extends Model
     public function physician(): BelongsTo
     {
         return $this->belongsTo(User::class, 'physician_id', 'user_id');
+    }
+
+    /**
+     * The physician this consultation was scheduled to before any takeover.
+     * Null while no takeover has happened — physician() is the only assignment
+     * that ever matters in that case.
+     */
+    public function originalPhysician(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'original_physician_id', 'user_id');
+    }
+
+    /** The physician who claimed this consultation via Physician Takeover. */
+    public function takenOverByPhysician(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'taken_over_by_physician_id', 'user_id');
+    }
+
+    /**
+     * V1 allows a consultation to be claimed once only, so this doubles as the
+     * "already claimed" guard in ConsultationOwnershipService::takeOverByPhysician.
+     */
+    public function wasTakenOver(): bool
+    {
+        return $this->taken_over_at !== null;
     }
 
     public function slot(): BelongsTo

@@ -193,9 +193,148 @@ class PhysicianController extends Controller
         ]);
     }
 
+    /**
+     * Physician Takeover: claim a scheduled consultation whose assigned
+     * physician has not started it within the grace period.
+     *
+     * Authorization is the project's existing convention — authorizePhysician()
+     * rejects any non-physician and any physician acting under someone else's
+     * route id, and LoginRequest already refuses non-active accounts at sign-in.
+     * Every eligibility rule (status, grace period, already-claimed) is decided
+     * inside the service under a row lock, never here and never in the browser.
+     */
+    public function takeOverConsultation(Request $request, User $physician, Consultation $consultation)
+    {
+        $this->authorizePhysician($physician);
+
+        try {
+            $result = $this->ownershipService->takeOverByPhysician(
+                (int) $consultation->request_id,
+                (int) Auth::id()
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $consultation = $result['consultation'];
+        $session = $result['session'];
+
+        // CONSULTATION_ASSIGNED is reused rather than adding an enum case: from
+        // the patient's side this event genuinely is "your consultation has been
+        // assigned to a physician", and the message says exactly what happened.
+        NotificationService::sendUnique(
+            $consultation->patient_id,
+            NotificationType::CONSULTATION_ASSIGNED,
+            'Consultation Reassigned',
+            'Another physician has taken over your scheduled consultation and will attend to you shortly.',
+            [
+                'consultation_id' => $consultation->request_id,
+                'request_id' => $consultation->request_id,
+                'session_id' => $session->id,
+            ]
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'You have successfully taken over this consultation.',
+        ]);
+    }
+
+    /**
+     * Everything the inbox needs to render Physician Takeover for one row.
+     *
+     * The eligibility boundary is computed from ConsultationOwnershipService::
+     * takeoverEligibleAt(), the same helper the claim transaction uses, so the
+     * button the physician sees and the rule the server enforces cannot drift
+     * apart. This is presentation only — a stale page that still shows a Claim
+     * button is rejected by the service, not by this method.
+     */
+    private function resolveTakeoverInfo(Consultation $consultation, int $currentPhysicianId): array
+    {
+        $session = $consultation->consultationSession;
+        $slot = $session?->slot;
+        $assignedPhysicianId = (int) ($consultation->assigned_physician_id ?? 0);
+        $assignedPhysicianName = $this->physicianDisplayName($consultation->physician);
+
+        $info = [
+            'assigned_physician_name' => $assignedPhysicianId > 0 ? $assignedPhysicianName : null,
+            'is_assigned_to_me' => $assignedPhysicianId === $currentPhysicianId,
+            // Whether the ordinary Reject/Schedule/Start controls belong to this
+            // physician: their own consultation, or one nobody has claimed yet.
+            // The backend refuses those actions for anyone else anyway; this flag
+            // just stops the inbox offering a button that can only 422.
+            'is_actionable_by_me' => $assignedPhysicianId === $currentPhysicianId || $assignedPhysicianId <= 0,
+            'was_taken_over' => (bool) $session?->taken_over_at,
+            'original_physician_name' => $session?->originalPhysician
+                ? $this->physicianDisplayName($session->originalPhysician)
+                : null,
+            'takeover_available' => false,
+            'takeover_message' => null,
+            'waiting_minutes' => null,
+        ];
+
+        // Own consultation, or nobody is assigned yet: takeover does not apply.
+        if ($info['is_assigned_to_me'] || $assignedPhysicianId <= 0) {
+            return $info;
+        }
+
+        if ($info['was_taken_over']) {
+            $info['takeover_message'] = 'Already claimed by ' . $assignedPhysicianName . '.';
+
+            return $info;
+        }
+
+        $isClaimableShape = $consultation->request_status === 'scheduled'
+            && $session
+            && $session->consultation_status === 'scheduled'
+            && $session->started_at === null
+            && $slot
+            && in_array($slot->status, ['booked', 'missed'], true);
+
+        if (! $isClaimableShape) {
+            $info['takeover_message'] = 'Assigned to ' . $assignedPhysicianName . '.';
+
+            return $info;
+        }
+
+        $eligibleAt = ConsultationOwnershipService::takeoverEligibleAt($slot);
+        $now = CarbonImmutable::now();
+
+        if ($now->lessThan($eligibleAt)) {
+            $info['takeover_message'] = 'Assigned to ' . $assignedPhysicianName
+                . '. Not yet available for takeover — claimable from '
+                . $eligibleAt->format('M d, Y h:i A') . '.';
+
+            return $info;
+        }
+
+        $scheduledStart = $eligibleAt->subMinutes(ConsultationOwnershipService::TAKEOVER_GRACE_MINUTES);
+
+        $info['takeover_available'] = true;
+        $info['waiting_minutes'] = (int) $scheduledStart->diffInMinutes($now);
+        $info['takeover_message'] = $assignedPhysicianName
+            . ' has not started this consultation. You can claim it.';
+
+        return $info;
+    }
+
+    private function physicianDisplayName(?User $physician): string
+    {
+        return trim(optional($physician)->first_name . ' ' . optional($physician)->last_name) ?: 'Unassigned';
+    }
+
     private function getConsultationInboxData(): array
     {
-        $assignedConsultations = Consultation::with(['patient', 'nurse', 'consultationSession.slot'])
+        $assignedConsultations = Consultation::with([
+                'patient',
+                'nurse',
+                'physician',
+                'consultationSession.slot',
+                'consultationSession.originalPhysician',
+            ])
             ->whereIn('request_status', ['reviewed', 'assigned', 'scheduled'])
             ->orderByDesc('submitted_at')
             ->get();
@@ -217,8 +356,9 @@ class PhysicianController extends Controller
         return $consultations->map(function ($consultation) use ($currentPhysicianId) {
             $canStart = $this->resolveCanStart($consultation->request_status, $consultation->consultationSession);
             $severity = StatusBadge::highestSeverity($consultation->symptoms_desc);
+            $takeover = $this->resolveTakeoverInfo($consultation, $currentPhysicianId);
 
-            return [
+            return $takeover + [
                 'request_id' => $consultation->request_id,
                 'patient_name' => trim(optional($consultation->patient)->first_name . ' ' . optional($consultation->patient)->last_name) ?: 'Unknown Patient',
                 'patient_is_online' => $this->isUserOnline($consultation->patient),
@@ -241,6 +381,7 @@ class PhysicianController extends Controller
                 'start_url' => route('physician.consultations.start', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
                 'available_slots_url' => route('physician.consultations.available_slots', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
                 'schedule_url' => route('physician.consultations.schedule', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
+                'takeover_url' => route('physician.consultations.take_over', ['physician' => $currentPhysicianId, 'consultation' => $consultation]),
                 'scheduled_slot' => $this->serializeScheduledSlot($consultation->consultationSession),
                 'can_start' => $canStart['can_start'],
                 'can_start_message' => $canStart['can_start_message'],

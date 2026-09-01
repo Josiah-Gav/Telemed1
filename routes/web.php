@@ -116,6 +116,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('physician.consultations.reject_reviewed');
         Route::post('/consultations/{consultation}/start', [\App\Http\Controllers\PhysicianController::class, 'startConsultation'])
             ->name('physician.consultations.start');
+        Route::post('/consultations/{consultation}/take-over', [\App\Http\Controllers\PhysicianController::class, 'takeOverConsultation'])
+            ->name('physician.consultations.take_over');
         Route::get('/consultations/{consultation}/available-slots', [\App\Http\Controllers\PhysicianController::class, 'availableScheduleSlotsForConsultation'])
             ->name('physician.consultations.available_slots');
         Route::post('/consultations/{consultation}/schedule', [\App\Http\Controllers\PhysicianController::class, 'scheduleConsultation'])
