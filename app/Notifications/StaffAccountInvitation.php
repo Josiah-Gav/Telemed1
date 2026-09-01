@@ -42,6 +42,7 @@ class StaffAccountInvitation extends Notification
             ->subject('CLSU Telemedicine — Staff Account Invitation')
             ->greeting('Hello '.$this->user->first_name.',')
             ->line('An administrator has created a '.$role.' account for you on CLSU Telemedicine.')
+            ->line('Account email: '.$this->user->email)
             ->line('To get started, activate your account and create your own password.')
             ->action('Activate Account', $this->activationUrl())
             ->line("This invitation link expires in {$expiresInDays} days.")
