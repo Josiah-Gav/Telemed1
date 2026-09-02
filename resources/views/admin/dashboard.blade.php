@@ -171,6 +171,8 @@
                 $symptoms = $analytics['symptoms'];
                 $standardizedLabels = array_column($symptoms['standardized'], 'name');
                 $standardizedCounts = array_column($symptoms['standardized'], 'count');
+                $customLabels = array_column($symptoms['custom']['terms'], 'name');
+                $customCounts = array_column($symptoms['custom']['terms'], 'count');
                 $severityLabels = ['1', '2', '3 (Default)', '4 (Severe)'];
                 $severityCounts = array_values($symptoms['severity']['counts']);
                 $customPercentDisplay = $symptoms['custom']['percentage'] === null
@@ -200,6 +202,27 @@
                     :summary="'Horizontal bar chart of the top standardized symptoms across ' . $symptoms['valid_requests'] . ' requests with recorded symptoms'"
                     empty-message="No symptom data recorded for this period."
                     :footnote="'Out of ' . $symptoms['valid_requests'] . ' initial requests with at least one recorded symptom.'"
+                />
+
+                {{-- Kept as its own chart rather than merged into "Most reported
+                     symptoms" above: classification there is exact-string match
+                     only (case/whitespace-insensitive, see SymptomAnalytics::
+                     normalize()), so a custom entry with different wording for a
+                     similar complaint — "Migraine", "Headaches" — is never folded
+                     into a standardized bar like "Headache". Merging them here
+                     would require guessing a similarity threshold with no ground
+                     truth; showing both lists lets an admin make that judgment
+                     call themselves, which is also what the "Candidates for
+                     standardization" table below is for. --}}
+                <x-dash.chart
+                    chart-id="admin-custom-symptoms-chart"
+                    type="hbar"
+                    title="Most reported custom symptoms"
+                    :labels="$customLabels"
+                    :datasets="[['label' => 'Requests', 'data' => $customCounts]]"
+                    summary="Horizontal bar chart of custom symptom terms reported three or more times"
+                    empty-message="No custom symptom has been reported 3 or more times in this period."
+                    footnote="Custom symptom terms reported 3 or more times (fewer are hidden to protect patient privacy). Kept separate from the standardized chart above — a differently-worded custom entry for a similar complaint is not automatically merged with it."
                 />
 
                 <div class="grid gap-4 lg:grid-cols-2">

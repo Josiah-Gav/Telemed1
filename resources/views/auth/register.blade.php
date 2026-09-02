@@ -26,6 +26,13 @@
             <x-input-error :messages="$errors->get('last_name')" class="mt-2" />
         </div>
 
+        <!-- CLSU ID -->
+        <div class="mt-4">
+            <x-input-label for="clsu_id" :value="__('CLSU ID')" />
+            <x-text-input id="clsu_id" class="block mt-1 w-full" type="text" name="clsu_id" :value="old('clsu_id')" required autocomplete="off" />
+            <x-input-error :messages="$errors->get('clsu_id')" class="mt-2" />
+        </div>
+
         <!-- Email Address -->
         <div class="mt-4">
             <x-input-label for="email" :value="__('Email')" />

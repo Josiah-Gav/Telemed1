@@ -10,20 +10,26 @@
 
         <div>
             <label for="update_password_current_password" class="block text-sm font-semibold text-slate-800">{{ __('Current Password') }}</label>
-            <input id="update_password_current_password" name="current_password" type="password" class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100" autocomplete="current-password" />
+            <x-password-reveal>
+                <input id="update_password_current_password" name="current_password" :type="show ? 'text' : 'password'" class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100" autocomplete="current-password" />
+            </x-password-reveal>
             <x-input-error :messages="$errors->updatePassword->get('current_password')" class="mt-2" />
         </div>
 
         <div class="grid gap-5 sm:grid-cols-2">
             <div>
                 <label for="update_password_password" class="block text-sm font-semibold text-slate-800">{{ __('New Password') }}</label>
-                <input id="update_password_password" name="password" type="password" class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100" autocomplete="new-password" />
+                <x-password-reveal>
+                    <input id="update_password_password" name="password" :type="show ? 'text' : 'password'" class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100" autocomplete="new-password" />
+                </x-password-reveal>
                 <x-input-error :messages="$errors->updatePassword->get('password')" class="mt-2" />
             </div>
 
             <div>
                 <label for="update_password_password_confirmation" class="block text-sm font-semibold text-slate-800">{{ __('Confirm Password') }}</label>
-                <input id="update_password_password_confirmation" name="password_confirmation" type="password" class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100" autocomplete="new-password" />
+                <x-password-reveal>
+                    <input id="update_password_password_confirmation" name="password_confirmation" :type="show ? 'text' : 'password'" class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-brand-green focus:ring-green-100" autocomplete="new-password" />
+                </x-password-reveal>
                 <x-input-error :messages="$errors->updatePassword->get('password_confirmation')" class="mt-2" />
             </div>
         </div>

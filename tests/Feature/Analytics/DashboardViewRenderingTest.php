@@ -77,6 +77,29 @@ it('renders the admin dashboard with accessible chart canvases and no assigned s
     expect($html)->toContain('hidden when reported fewer than 3 times');
 });
 
+it('shows a separate chart of custom symptom terms, not merged into the standardized chart', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $patient = renderPatient();
+
+    // "Migraine" is not in SymptomAnalytics::STANDARDIZED_SYMPTOMS, so this
+    // reaches the k=3 qualifying threshold and must appear in its own chart
+    // rather than folded into "Headache" for sounding similar.
+    renderRequest($patient, ['symptoms_desc' => [['name' => 'Migraine', 'severity' => 2]]]);
+    renderRequest($patient, ['symptoms_desc' => [['name' => 'Migraine', 'severity' => 2]]]);
+    renderRequest($patient, ['symptoms_desc' => [['name' => 'Migraine', 'severity' => 2]]]);
+
+    // Reported only twice — stays below the privacy floor and must not leak.
+    renderRequest($patient, ['symptoms_desc' => [['name' => 'Brain Fog', 'severity' => 1]]]);
+    renderRequest($patient, ['symptoms_desc' => [['name' => 'Brain Fog', 'severity' => 1]]]);
+
+    $html = $this->actingAs($admin)->get('/dashboard')->getContent();
+
+    expect($html)->toContain('id="admin-custom-symptoms-chart"')
+        ->toContain('Most reported custom symptoms')
+        ->toContain('Migraine')
+        ->not->toContain('Brain Fog');
+});
+
 it('renders the nurse dashboard with the shared queue visually and structurally distinct from personal workload', function () {
     $nurse = renderNurse();
     $patient = renderPatient();

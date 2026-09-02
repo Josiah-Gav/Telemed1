@@ -60,6 +60,15 @@ const STATUS_COLORS = {
 const PRIORITY_COLORS = { High: '#dc2626', Normal: '#94a3b8' };
 const TYPE_COLORS = { Initial: BRAND_GREEN, 'Follow-up': BRAND_TEAL };
 
+// A validated categorical palette (dataviz skill's references/palette.md) for
+// charts with no other natural per-bar color, e.g. "Most reported symptoms" —
+// unlike hbar-status/splitbar-priority/-type above, there's no fixed
+// label->meaning mapping to key off, just N distinct categories. Order is the
+// CVD-safety mechanism (validated on the adjacent pairlist, not cosmetic) —
+// don't reorder. Cycles past 8 categories, which would start repeating a
+// color; there's no chart on these dashboards that currently shows more.
+const CATEGORICAL_PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+
 // Sev 1 -> Sev 4, left to right. Index 2 (severity 3) is overridden with a
 // diagonal hatch pattern below — it's the pre-selected default value, not
 // necessarily a deliberate patient choice (Phase 1 §07 / Phase 2 AD-10).
@@ -148,7 +157,9 @@ function initHorizontalBar(canvas, payload, colorFor) {
             datasets: [{
                 label: seriesLabel(payload, 'Requests'),
                 data,
-                backgroundColor: labels.map((label) => (colorFor ? colorFor(label) : BRAND_GREEN)),
+                backgroundColor: labels.map((label, i) => (
+                    colorFor ? colorFor(label) : CATEGORICAL_PALETTE[i % CATEGORICAL_PALETTE.length]
+                )),
             }],
         },
         options: baseOptions({
@@ -223,7 +234,11 @@ function initSeverityBar(canvas, payload) {
 
 const RENDERERS = {
     line: (canvas, payload) => initLine(canvas, payload),
-    'hbar-status': (canvas, payload) => initHorizontalBar(canvas, payload, (l) => STATUS_COLORS[l] ?? '#94a3b8'),
+    // STATUS_COLORS keys are lowercase (matching request_status's raw enum
+    // value); labels reaching here are ucfirst()'d for display
+    // (admin/dashboard.blade.php's $statusLabelsForDisplay), so the lookup
+    // must lowercase first or every bar falls through to the gray default.
+    'hbar-status': (canvas, payload) => initHorizontalBar(canvas, payload, (l) => STATUS_COLORS[l.toLowerCase()] ?? '#94a3b8'),
     hbar: (canvas, payload) => initHorizontalBar(canvas, payload, null),
     'splitbar-priority': (canvas, payload) => initSplitBar(canvas, payload, (l) => PRIORITY_COLORS[l] ?? '#94a3b8'),
     'splitbar-type': (canvas, payload) => initSplitBar(canvas, payload, (l) => TYPE_COLORS[l] ?? BRAND_GREEN),
