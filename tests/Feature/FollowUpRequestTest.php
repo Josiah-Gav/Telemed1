@@ -194,6 +194,95 @@ it('hides physician follow-up card when the follow-up consultation is completed'
         ->assertJsonPath('physician_follow_up', null);
 });
 
+it('hides the physician follow-up card when the patient themselves initiated the follow-up', function () {
+    $patient = User::factory()->create([
+        'first_name' => 'Maya',
+        'last_name' => 'Reyes',
+        'role' => 'patient',
+        'user_type' => 'student',
+    ]);
+
+    $physician = User::factory()->create([
+        'first_name' => 'Noah',
+        'last_name' => 'Flores',
+        'role' => 'physician',
+        'user_type' => 'staff',
+        'specialization' => 'General Medicine',
+    ]);
+
+    $originalRequest = Consultation::forceCreate([
+        'patient_id' => $patient->user_id,
+        'assigned_physician_id' => $physician->user_id,
+        'assigned_nurse_id' => null,
+        'type' => 'initial',
+        'concern_category' => 'headache',
+        'symptoms_desc' => [['name' => 'Headache', 'severity' => 'mild']],
+        'online_reason' => 'Need consultation review',
+        'request_status' => 'completed',
+        'priority_level' => 'Normal',
+        'file_attachments' => null,
+    ]);
+
+    $originalSession = ConsultationSession::create([
+        'request_id' => $originalRequest->request_id,
+        'physician_id' => $physician->user_id,
+        'slot_id' => null,
+        'consultation_status' => 'completed',
+        'assessment' => 'Initial assessment complete.',
+        'plan' => 'Continue observation.',
+        'recommendations' => 'Return if symptoms worsen.',
+        'assigned_at' => now()->subDays(2),
+        'started_at' => now()->subDays(2),
+        'completed_at' => now()->subDay(),
+    ]);
+
+    $followUpRequest = \App\Models\FollowUpRequest::create([
+        'consultation_id' => $originalSession->id,
+        'patient_id' => $patient->user_id,
+        'reason' => 'Symptoms returned.',
+        'status' => 'approved',
+        'reviewed_by_nurse_id' => null,
+        'decided_by_physician_id' => $physician->user_id,
+        'decided_at' => now(),
+    ]);
+
+    $patientInitiatedConsultation = Consultation::forceCreate([
+        'patient_id' => $patient->user_id,
+        'assigned_physician_id' => $physician->user_id,
+        'assigned_nurse_id' => null,
+        'type' => 'follow_up',
+        'parent_consultation_id' => null,
+        'concern_category' => 'follow-up care',
+        'symptoms_desc' => [['name' => 'Cough', 'severity' => 'mild']],
+        'online_reason' => 'Need follow-up review',
+        'request_status' => 'scheduled',
+        'priority_level' => 'Normal',
+        'file_attachments' => null,
+    ]);
+
+    // Patient-initiated: the session links back to the FollowUpRequest the
+    // patient submitted — this is what must exclude it from the
+    // physician-initiated card (see DashboardController::getPhysicianInitiatedFollowUp).
+    ConsultationSession::create([
+        'request_id' => $patientInitiatedConsultation->request_id,
+        'physician_id' => $physician->user_id,
+        'follow_up_request_id' => $followUpRequest->id,
+        'slot_id' => null,
+        'consultation_status' => 'scheduled',
+        'assessment' => 'Follow-up assessment pending.',
+        'plan' => 'Continue monitoring.',
+        'recommendations' => 'Return if symptoms worsen.',
+        'assigned_at' => now()->subHours(2),
+        'started_at' => null,
+    ]);
+
+    $this->actingAs($patient);
+
+    $this->getJson(route('dashboard.active_consultation'))
+        ->assertOk()
+        ->assertJsonPath('physician_follow_up', null);
+});
+
 it('hides the follow-up status card on patient dashboard when latest follow-up request is rejected', function () {
     $patient = User::factory()->create([
         'first_name' => 'Maya',

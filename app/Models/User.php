@@ -81,6 +81,27 @@ class User extends Authenticatable implements MustVerifyEmail
             && in_array($this->role, self::INVITED_ROLES, true);
     }
 
+    /**
+     * The patient's one live consultation session, or null when they have none.
+     *
+     * A patient can only ever have a single consultation in flight, so this
+     * returns at most one row. The 'active' + 'active' pair is deliberately the
+     * exact condition ConsultationSessionPolicy::sendMessage allows, so anything
+     * linking to this session (the mobile floating action button) can never send
+     * the patient somewhere the policy would then refuse.
+     */
+    public function activeConsultationSession(): ?ConsultationSession
+    {
+        return ConsultationSession::query()
+            ->where('consultation_status', 'active')
+            ->whereHas('request', function ($query) {
+                $query->where('patient_id', $this->user_id)
+                    ->where('request_status', 'active');
+            })
+            ->latest('id')
+            ->first();
+    }
+
     protected static function booted(): void
     {
         // Admins are provisioned directly (no self-registration, no invitation flow),

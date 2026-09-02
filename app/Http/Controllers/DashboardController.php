@@ -255,12 +255,26 @@ class DashboardController extends Controller
         };
     }
 
+    /**
+     * Both follow-up creation paths produce a type = 'follow_up' Consultation,
+     * so the type alone cannot say who started it. The discriminator is the
+     * session's follow_up_request_id: the patient-initiated path (patient asks
+     * -> nurse forwards -> physician approves, ConsultationOwnershipService::
+     * decideFollowUpByPhysician) links the new session back to the originating
+     * FollowUpRequest, while a physician acting on their own (PhysicianController::
+     * createPhysicianFollowUp -> createFollowUpConsultationFromSource, called
+     * without a $followUpRequestId) leaves it null. Without the whereHas below
+     * this card also appeared for follow-ups the patient themselves requested.
+     */
     private function getPhysicianInitiatedFollowUp(int $patientId): ?array
     {
         $consultation = Consultation::query()
             ->with(['consultationSession.slot', 'physician'])
             ->where('patient_id', $patientId)
             ->where('type', 'follow_up')
+            ->whereHas('consultationSession', function ($sessionQuery) {
+                $sessionQuery->whereNull('follow_up_request_id');
+            })
             ->whereIn('request_status', ['scheduled', 'active'])
             ->orderByRaw("CASE request_status WHEN 'scheduled' THEN 1 WHEN 'active' THEN 2 ELSE 3 END")
             ->latest('submitted_at')

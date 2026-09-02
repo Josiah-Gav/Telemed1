@@ -13,8 +13,13 @@
                         <div class="rounded-3xl border border-gray-200 bg-slate-50 p-6">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Active Consultation</p>
-                                    <h3 class="mt-2 text-2xl font-bold text-slate-900">{{ ucfirst($consultation->concern_category) }} Consultation</h3>
+                                    <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ $consultation->type === 'follow_up' ? 'Follow-up Consultation' : 'Active Consultation' }}</p>
+                                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                                        <h3 class="text-2xl font-bold text-slate-900">{{ ucfirst($consultation->concern_category) }} Consultation</h3>
+                                        @if($consultation->type === 'follow_up')
+                                            <span class="inline-flex items-center rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">Follow-up</span>
+                                        @endif
+                                    </div>
                                 </div>
                                 @php
                                     $status = $consultation->request_status;
@@ -42,6 +47,19 @@
                                 </div>
                             </div>
                         </div>
+
+                        @if($consultation->type === 'follow_up' && $consultation->parentConsultation?->request)
+                            <div class="rounded-3xl border border-gray-200 bg-white p-6">
+                                <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Original Consultation</p>
+                                <p class="mt-2 text-sm text-slate-600">This follow-up was created from an earlier consultation.</p>
+                                <a href="{{ route('consultations.show', $consultation->parentConsultation->request) }}" class="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-green hover:underline">
+                                    View original consultation
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                                    </svg>
+                                </a>
+                            </div>
+                        @endif
 
                         @if($consultation->request_status === 'scheduled' && $consultation->consultationSession && $consultation->consultationSession->slot)
                             <div class="rounded-3xl border border-brand-border bg-brand-gold-soft p-6">

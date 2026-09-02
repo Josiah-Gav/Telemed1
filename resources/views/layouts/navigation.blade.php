@@ -141,6 +141,74 @@
 </nav>
 
     <script>
+        // Shared by notificationPanel() (the header dropdown) and the full
+        // "All Notifications" page (notifications/index.blade.php), so a
+        // notification always opens the same place no matter where it was
+        // clicked from — one switch statement, not two copies to keep in sync.
+        window.notificationNav = {
+            resolveUrl(n, role, userId) {
+                const d = n.data || {};
+                const id = userId;
+                let url = '{{ route('dashboard') }}';
+
+                switch (n.type) {
+                    case 'new_message':
+                    case 'new_attachment':
+                        if (d.session_id) {
+                            url = '{{ url('consultation-sessions') }}' + '/' + d.session_id + '/messaging';
+                        }
+                        break;
+                    case 'consultation_scheduled':
+                    case 'consultation_rescheduled':
+                    case 'consultation_started':
+                    case 'consultation_completed':
+                    case 'consultation_missed':
+                        if (role === 'patient' && d.request_id) {
+                            url = '{{ url('consultations') }}' + '/' + d.request_id;
+                        } else if (role === 'physician') {
+                            url = '{{ url('physicians') }}' + '/' + id + '/consultation-inbox';
+                        }
+                        break;
+                    case 'consultation_submitted':
+                        url = '{{ url('nurses') }}' + '/' + id + '/consultation-inbox';
+                        break;
+                    case 'consultation_assigned':
+                    case 'high_priority_consultation':
+                        url = '{{ url('physicians') }}' + '/' + id + '/consultation-inbox';
+                        break;
+                    case 'follow_up_submitted':
+                        if (role === 'nurse') {
+                            url = '{{ url('nurses') }}' + '/' + id + '/follow-up-requests';
+                        } else if (role === 'physician') {
+                            url = '{{ url('physicians') }}' + '/' + id + '/follow-up-requests';
+                        }
+                        break;
+                    case 'follow_up_approved':
+                    case 'follow_up_rejected':
+                    case 'follow_up_scheduled':
+                    case 'follow_up_starting_soon':
+                    case 'physician_request':
+                        if (role === 'patient') {
+                            url = '{{ route('patient.follow_up_list') }}';
+                        }
+                        break;
+                }
+
+                return url;
+            },
+            formatTime(iso) {
+                if (!iso) return '';
+                const date = new Date(iso);
+                if (Number.isNaN(date.getTime())) return '';
+                const diff = (Date.now() - date.getTime()) / 1000;
+                if (diff < 60) return 'Just now';
+                if (diff < 3600) return Math.floor(diff / 60) + ' minutes ago';
+                if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
+                if (diff < 604800) return Math.floor(diff / 86400) + ' days ago';
+                return date.toLocaleDateString();
+            }
+        };
+
         function notificationPanel() {
             return {
                 open: false,
@@ -236,65 +304,10 @@
                     });
                 },
                 navigate(n) {
-                    const d = n.data || {};
-                    const id = this.userId;
-                    let url = '{{ route('dashboard') }}';
-
-                    switch (n.type) {
-                        case 'new_message':
-                        case 'new_attachment':
-                            if (d.session_id) {
-                                url = '{{ url('consultation-sessions') }}' + '/' + d.session_id + '/messaging';
-                            }
-                            break;
-                        case 'consultation_scheduled':
-                        case 'consultation_rescheduled':
-                        case 'consultation_started':
-                        case 'consultation_completed':
-                        case 'consultation_missed':
-                            if (this.role === 'patient' && d.request_id) {
-                                url = '{{ url('consultations') }}' + '/' + d.request_id;
-                            } else if (this.role === 'physician') {
-                                url = '{{ url('physicians') }}' + '/' + id + '/consultation-inbox';
-                            }
-                            break;
-                        case 'consultation_submitted':
-                            url = '{{ url('nurses') }}' + '/' + id + '/consultation-inbox';
-                            break;
-                        case 'consultation_assigned':
-                        case 'high_priority_consultation':
-                            url = '{{ url('physicians') }}' + '/' + id + '/consultation-inbox';
-                            break;
-                        case 'follow_up_submitted':
-                            if (this.role === 'nurse') {
-                                url = '{{ url('nurses') }}' + '/' + id + '/follow-up-requests';
-                            } else if (this.role === 'physician') {
-                                url = '{{ url('physicians') }}' + '/' + id + '/follow-up-requests';
-                            }
-                            break;
-                        case 'follow_up_approved':
-                        case 'follow_up_rejected':
-                        case 'follow_up_scheduled':
-                        case 'follow_up_starting_soon':
-                        case 'physician_request':
-                            if (this.role === 'patient') {
-                                url = '{{ route('patient.follow_up_list') }}';
-                            }
-                            break;
-                    }
-
-                    window.location.href = url;
+                    window.location.href = window.notificationNav.resolveUrl(n, this.role, this.userId);
                 },
                 formatTime(iso) {
-                    if (!iso) return '';
-                    const date = new Date(iso);
-                    if (Number.isNaN(date.getTime())) return '';
-                    const diff = (Date.now() - date.getTime()) / 1000;
-                    if (diff < 60) return 'Just now';
-                    if (diff < 3600) return Math.floor(diff / 60) + ' minutes ago';
-                    if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
-                    if (diff < 604800) return Math.floor(diff / 86400) + ' days ago';
-                    return date.toLocaleDateString();
+                    return window.notificationNav.formatTime(iso);
                 }
             };
         }
@@ -315,6 +328,14 @@
             'users' => 'M12 4.354a4 4 0 014 4V7h1.5a2.5 2.5 0 012.5 2.5v11a1 1 0 01-1 1H4a1 1 0 01-1-1v-11a2.5 2.5 0 012.5-2.5H8V8.354a4 4 0 014-4z',
             'new' => 'M12 4v16m8-8H4',
         ];
+
+        // A patient's floating action button is a shortcut straight into their
+        // live consultation's chat, so it only exists when there is one. Resolved
+        // here (once per render) rather than in each controller because this
+        // partial is included on every page.
+        $patientLiveSession = Auth::check() && Auth::user()->role === 'patient'
+            ? Auth::user()->activeConsultationSession()
+            : null;
     @endphp
 
     <!-- Mobile bottom navigation (visible only on small screens). Icon-only
@@ -364,11 +385,13 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $navIcon['active'] }}" />
             </svg>
         </a>
-    @elseif(Auth::check() && Auth::user()->role === 'patient' && ! request()->routeIs('dashboard') && ! request()->routeIs('consultations.messaging.show'))
-        {{-- Patients have no standalone "active consultation" page — it's
-             surfaced as a card on their dashboard — so the FAB links there. --}}
+    @elseif($patientLiveSession && ! request()->routeIs('consultations.messaging.show'))
+        {{-- Patients get the FAB only while a consultation is actually running,
+             and it drops them straight into that consultation's messaging page
+             — the only thing there is to act on. Hidden on the messaging page
+             itself, where it would float over the message composer. --}}
         <a
-            href="{{ route('dashboard') }}"
+            href="{{ route('consultations.messaging.show', $patientLiveSession) }}"
             aria-label="{{ __('Active Consultation') }}"
             title="{{ __('Active Consultation') }}"
             class="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-white shadow-lg transition hover:bg-brand-green-deep sm:hidden"

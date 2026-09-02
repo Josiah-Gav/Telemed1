@@ -85,14 +85,14 @@
             </template>
         </div>
 
-        <!-- Panel Footer
+        <!-- Panel Footer -->
         <div class="border-t border-brand-border px-5 py-3">
-            <a 
-                href="{{ route('notifications.index') }}" 
+            <a
+                href="{{ route('notifications.all') }}"
                 class="block text-center text-sm font-semibold text-brand-green hover:text-brand-green-deep transition"
             >
-                View all notifications
+                View all Notifications
             </a>
-        </div> -->
+        </div>
     </div>
 </div>

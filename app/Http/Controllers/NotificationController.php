@@ -9,12 +9,38 @@ use Illuminate\Http\Request;
 class NotificationController extends Controller
 {
     /**
+     * The same today/last_7_days/last_30_days/all vocabulary
+     * ConsultationHistoryQuery::ALLOWED_DATE_FILTERS uses, so a user who has
+     * already used that filter on consultation history recognizes it here.
+     * Kept as its own copy rather than reusing that class: it is documented
+     * as the source of truth for consultation-history filtering
+     * specifically, and notifications have no reason to change in lockstep
+     * with it.
+     */
+    private const ALLOWED_DATE_FILTERS = ['today', 'last_7_days', 'last_30_days', 'all'];
+
+    /**
      * Return the authenticated user's notifications, newest first.
+     *
+     * ?unread=1 restricts to unread notifications only, and ?date_filter=
+     * (today|last_7_days|last_30_days) restricts by created_at — both used
+     * by the "All Notifications" page's tabs and date filter
+     * (notifications/index.blade.php) so it can page through the full
+     * matching set rather than filtering whatever page happened to load.
      */
     public function index(Request $request): JsonResponse
     {
+        $dateFilter = $request->query('date_filter', 'all');
+        $dateFilter = in_array($dateFilter, self::ALLOWED_DATE_FILTERS, true) ? $dateFilter : 'all';
+
         $notifications = Notification::query()
             ->forUser((int) $request->user()->user_id)
+            ->when($request->boolean('unread'), fn ($query) => $query->unread())
+            ->when($dateFilter !== 'all', fn ($query) => match ($dateFilter) {
+                'today' => $query->whereDate('created_at', now()->toDateString()),
+                'last_7_days' => $query->where('created_at', '>=', now()->subDays(7)->startOfDay()),
+                'last_30_days' => $query->where('created_at', '>=', now()->subDays(30)->startOfDay()),
+            })
             ->orderByDesc('created_at')
             ->paginate(20);
 
@@ -27,6 +53,20 @@ class NotificationController extends Controller
                 'per_page' => $notifications->perPage(),
                 'total' => $notifications->total(),
             ],
+        ]);
+    }
+
+    /**
+     * The full "All Notifications" page (routes/web.php: notifications.all).
+     * Server-renders the first page of results so there's no loading-spinner
+     * flash on open; the page's Alpine component fetches subsequent pages
+     * and tab switches from index() above, the same JSON endpoint the header
+     * dropdown already uses.
+     */
+    public function all(Request $request)
+    {
+        return view('notifications.index', [
+            'initialResponse' => $this->index($request)->getData(true),
         ]);
     }
 

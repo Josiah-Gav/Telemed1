@@ -60,7 +60,67 @@
                     </p>
                 </div>
 
-                <div class="overflow-x-auto">
+                {{-- One hidden form per session, shared by the card button and the
+                     table button. requestFollowUp() looks the form up by id and fills
+                     its textarea, so exactly one element may carry each id. --}}
+                @foreach($completedConsultations as $session)
+                    @if($session->followUpRequests->firstWhere('status', 'pending') === null)
+                        <form id="follow-up-form-{{ $session->id }}" method="POST" action="{{ route('patient.follow_up_requests.store', ['session' => $session]) }}" class="hidden">
+                            @csrf
+                            <textarea name="reason" rows="2" maxlength="2000"></textarea>
+                        </form>
+                    @endif
+                @endforeach
+
+                {{-- Below sm the four-column table needs sideways scrolling, so the
+                     same rows render as cards. The column headers disappear with the
+                     table, so each value carries its own label. --}}
+                <div class="space-y-3 p-4 sm:hidden">
+                    @forelse($completedConsultations as $session)
+                        @php
+                            $request = $session->request;
+                            $patientName = trim((optional($request->patient)->first_name ?? '') . ' ' . (optional($request->patient)->last_name ?? '')) ?: 'Patient';
+                            $messagingUrl = route('consultations.messaging.show', ['session' => $session]);
+                            $existingFollowUp = $session->followUpRequests->firstWhere('status', 'pending');
+                        @endphp
+                        <article class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p class="text-sm font-semibold text-slate-900">{{ $patientName }}</p>
+
+                            <dl class="mt-2 space-y-1 text-xs">
+                                <div class="flex gap-2">
+                                    <dt class="font-semibold uppercase tracking-wide text-slate-500">Completed</dt>
+                                    <dd class="text-slate-700">{{ optional($session->completed_at)->format('M d, Y @ h:i A') }}</dd>
+                                </div>
+                                <div class="flex gap-2">
+                                    <dt class="font-semibold uppercase tracking-wide text-slate-500">Physician</dt>
+                                    <dd class="text-slate-700">{{ trim((optional($session->physician)->first_name ?? '') . ' ' . (optional($session->physician)->last_name ?? '')) ?: 'Unassigned' }}</dd>
+                                </div>
+                            </dl>
+
+                            <div class="mt-4 flex flex-wrap items-center gap-2">
+                                <a href="{{ $messagingUrl }}" class="inline-flex flex-1 items-center justify-center rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-white hover:bg-brand-green-deep">
+                                    View Details
+                                </a>
+
+                                @if($existingFollowUp)
+                                    <span class="inline-flex flex-1 items-center justify-center rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-800">
+                                        Follow-up pending review
+                                    </span>
+                                @else
+                                    <button type="button" data-form-id="follow-up-form-{{ $session->id }}" onclick="requestFollowUp(this)" class="inline-flex flex-1 items-center justify-center rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-white hover:bg-brand-green-deep">
+                                        Request Follow-up
+                                    </button>
+                                @endif
+                            </div>
+                        </article>
+                    @empty
+                        <p class="px-2 py-6 text-center text-sm text-slate-500">
+                            No completed consultations are eligible for follow-up right now.
+                        </p>
+                    @endforelse
+                </div>
+
+                <div class="hidden overflow-x-auto sm:block">
                     <table class="min-w-full divide-y divide-slate-200">
                         <thead class="bg-slate-50">
                             <tr>
@@ -104,10 +164,6 @@
                                                     <button type="button" data-form-id="follow-up-form-{{ $session->id }}" onclick="requestFollowUp(this)" class="inline-flex items-center justify-center rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-white hover:bg-brand-green-deep">
                                                         Request Follow-up
                                                     </button>
-                                                    <form id="follow-up-form-{{ $session->id }}" method="POST" action="{{ route('patient.follow_up_requests.store', ['session' => $session]) }}" class="hidden">
-                                                        @csrf
-                                                        <textarea name="reason" rows="2" maxlength="2000"></textarea>
-                                                    </form>
    
                                             @endif
                                         </div>

@@ -296,7 +296,7 @@ class ConsultationController extends Controller
     {
         abort_unless(Gate::allows('view', $consultation), 403, 'Unauthorized access.');
 
-        $consultation->load(['nurse', 'consultationSession.slot']);
+        $consultation->load(['nurse', 'consultationSession.slot', 'parentConsultation.request']);
 
         return view('patient.consultation-details', compact('consultation'));
     }

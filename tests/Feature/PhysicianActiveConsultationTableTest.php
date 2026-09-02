@@ -19,14 +19,14 @@ function activeConsultationPhysician(array $overrides = []): User
     ], $overrides));
 }
 
-function activeConsultationFor(User $physician, array $symptoms): Consultation
+function activeConsultationFor(User $physician, array $symptoms, string $type = 'initial'): Consultation
 {
     $patient = User::factory()->create(['role' => 'patient', 'user_type' => 'student']);
 
     return Consultation::forceCreate([
         'patient_id' => $patient->user_id,
         'assigned_physician_id' => $physician->user_id,
-        'type' => 'initial',
+        'type' => $type,
         'concern_category' => 'Headache',
         'symptoms_desc' => $symptoms,
         'online_reason' => 'Need consultation',
@@ -141,4 +141,37 @@ it('embeds StatusBadge tokens, additional information, and routed attachment URL
         'consultation' => $consultation->request_id,
         'file' => 'scan.png',
     ])), false);
+});
+
+/*
+| Follow-ups are the exception on this page, so only they are marked. The pill
+| is asserted as exact markup rather than by the words "Follow-up", which also
+| appear in the physician sidebar's "Follow-up Requests" link on every page.
+*/
+
+function followUpPillMarkup(): string
+{
+    return '<span class="inline-flex items-center rounded-full border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-600">Follow-up</span>';
+}
+
+it('marks a follow-up consultation in the active consultations list', function () {
+    $physician = activeConsultationPhysician();
+    activeConsultationFor($physician, [['name' => 'Headache', 'severity' => 2]], 'follow_up');
+
+    $response = $this->actingAs($physician)
+        ->get(route('physician.active_consultation', ['physician' => $physician->user_id]))
+        ->assertOk();
+
+    expect($response->getContent())->toContain(followUpPillMarkup());
+});
+
+it('leaves an initial consultation unmarked in the active consultations list', function () {
+    $physician = activeConsultationPhysician();
+    activeConsultationFor($physician, [['name' => 'Headache', 'severity' => 2]]);
+
+    $response = $this->actingAs($physician)
+        ->get(route('physician.active_consultation', ['physician' => $physician->user_id]))
+        ->assertOk();
+
+    expect($response->getContent())->not->toContain(followUpPillMarkup());
 });

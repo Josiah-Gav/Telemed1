@@ -256,7 +256,7 @@
                         aria-live="polite"
                         aria-relevant="additions"
                         aria-label="{{ __('Consultation conversation') }}"
-                        class="h-[52vh] min-h-[18rem] overflow-y-auto bg-brand-muted px-3 py-4 sm:h-[55vh] sm:px-5"
+                        class="relative h-[52vh] min-h-[18rem] overflow-y-auto bg-brand-muted px-3 py-4 sm:h-[55vh] sm:px-5"
                     >
                         <template x-if="messages.length === 0">
                             <div class="flex h-full flex-col items-center justify-center px-6 text-center">
@@ -630,7 +630,7 @@
 
                     <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
                         <div class="flex items-center justify-between gap-3">
-                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">HIS Sync Status</h4>
+                            <h4 class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">CHIS Sync Status</h4>
                             <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
                                 <span class="inline-block h-2 w-2 rounded-full bg-slate-400" aria-hidden="true"></span>
                                 Not connected

@@ -236,6 +236,75 @@ it('marks all notifications as read for the authenticated user only', function (
 });
 
 // ---------------------------------------------------------------------------
+// All Notifications page
+// ---------------------------------------------------------------------------
+
+it('renders the all-notifications page with only the authenticated users notifications', function () {
+    $patient = User::factory()->create(['role' => 'patient']);
+    $otherUser = User::factory()->create(['role' => 'patient']);
+
+    NotificationService::send($patient->user_id, NotificationType::CONSULTATION_SCHEDULED, 'Mine', 'My message', ['consultation_id' => 1]);
+    NotificationService::send($otherUser->user_id, NotificationType::CONSULTATION_SCHEDULED, 'Theirs', 'Their message', ['consultation_id' => 2]);
+
+    $this->actingAs($patient)
+        ->get(route('notifications.all'))
+        ->assertOk()
+        ->assertSee('Mine')
+        ->assertDontSee('Theirs');
+});
+
+it('requires authentication to view the all-notifications page', function () {
+    $this->get(route('notifications.all'))
+        ->assertRedirect(route('login'));
+});
+
+it('filters the notifications index to unread only when requested', function () {
+    $patient = User::factory()->create(['role' => 'patient']);
+
+    $unread = NotificationService::send($patient->user_id, NotificationType::CONSULTATION_SCHEDULED, 'Unread', 'Message', ['consultation_id' => 1]);
+    $read = NotificationService::send($patient->user_id, NotificationType::CONSULTATION_STARTED, 'Read', 'Message', ['consultation_id' => 2]);
+    $read->update(['read_at' => now()]);
+
+    $this->actingAs($patient)
+        ->getJson(route('notifications.index', ['unread' => 1]))
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.title', 'Unread');
+
+    $this->actingAs($patient)
+        ->getJson(route('notifications.index'))
+        ->assertOk()
+        ->assertJsonCount(2, 'data');
+});
+
+it('filters the notifications index by date range', function () {
+    $patient = User::factory()->create(['role' => 'patient']);
+
+    $today = NotificationService::send($patient->user_id, NotificationType::CONSULTATION_SCHEDULED, 'Today', 'Message', ['consultation_id' => 1]);
+    $old = NotificationService::send($patient->user_id, NotificationType::CONSULTATION_STARTED, 'Old', 'Message', ['consultation_id' => 2]);
+    // created_at isn't mass-assignable (Notification::$fillable), so update()
+    // would silently no-op here — forceFill bypasses that guard.
+    $old->forceFill(['created_at' => now()->subDays(40)])->save();
+
+    $this->actingAs($patient)
+        ->getJson(route('notifications.index', ['date_filter' => 'today']))
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.title', 'Today');
+
+    $this->actingAs($patient)
+        ->getJson(route('notifications.index', ['date_filter' => 'last_30_days']))
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.title', 'Today');
+
+    $this->actingAs($patient)
+        ->getJson(route('notifications.index', ['date_filter' => 'bogus']))
+        ->assertOk()
+        ->assertJsonCount(2, 'data');
+});
+
+// ---------------------------------------------------------------------------
 // Workflow integration
 // ---------------------------------------------------------------------------
 

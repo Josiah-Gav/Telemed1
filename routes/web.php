@@ -24,6 +24,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // In-app notifications
     Route::get('/notifications', [NotificationController::class, 'index'])
         ->name('notifications.index');
+    Route::get('/notifications/all', [NotificationController::class, 'all'])
+        ->name('notifications.all');
     Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount'])
         ->name('notifications.unread_count');
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])
