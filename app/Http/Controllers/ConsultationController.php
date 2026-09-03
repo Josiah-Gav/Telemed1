@@ -221,10 +221,35 @@ class ConsultationController extends Controller
             'attachments.*'    => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240', // 10MB Limit
         ]);
 
-        // 3. Decode alpine symptom list tracking payload 
+        // 3. Decode alpine symptom list tracking payload
         $symptomsData = json_decode($validated['symptoms_payload'], true);
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($symptomsData) || count($symptomsData) === 0) {
             return response()->json(['success' => false, 'message' => 'Please provide at least one symptom.'], 422);
+        }
+
+        // 3b. Reject a future onset date/time. The date/time picker only
+        // offers past-or-present values, but symptoms_payload is otherwise
+        // unvalidated per-entry (see SymptomAnalytics' class docblock, H-4)
+        // so a direct POST past the form could still submit one — this is
+        // the only check that actually enforces it. Date/time stay optional;
+        // only a supplied value is checked.
+        foreach ($symptomsData as $symptom) {
+            $date = is_array($symptom) ? ($symptom['date'] ?? null) : null;
+            if (! $date) {
+                continue;
+            }
+
+            $time = is_array($symptom) ? ($symptom['time'] ?? null) : null;
+
+            try {
+                $onset = \Carbon\Carbon::parse($date . ' ' . ($time ?: '00:00'));
+            } catch (\Exception $e) {
+                return response()->json(['success' => false, 'message' => 'One of the symptom onset dates is invalid.'], 422);
+            }
+
+            if ($onset->isFuture()) {
+                return response()->json(['success' => false, 'message' => 'Symptom onset date and time cannot be in the future.'], 422);
+            }
         }
 
         // 3. Process uploads. Prefer Cloudinary, but fall back to local storage if it fails.

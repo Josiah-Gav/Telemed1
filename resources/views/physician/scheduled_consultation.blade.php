@@ -387,9 +387,11 @@
 
                             const savedCount = data?.summary?.saved_count ?? 0;
                             const skippedCount = data?.summary?.skipped_by_conflict ?? 0;
+                            const skippedPastCount = data?.summary?.skipped_by_past ?? 0;
+                            const skippedPastText = skippedPastCount ? ` ${skippedPastCount} already-passed slot(s) were also skipped.` : '';
                             Swal.fire(
                                 'Saved',
-                                `Saved ${savedCount} slot(s). Skipped ${skippedCount} conflicting slot(s).`,
+                                `Saved ${savedCount} slot(s). Skipped ${skippedCount} conflicting slot(s).${skippedPastText}`,
                                 'success'
                             );
                         },
@@ -607,7 +609,7 @@
                         <div class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">{{ __('Date') }}</label>
-                                <input type="date" x-model="form.slot_date" class="block w-full rounded-md border-gray-300 focus:border-brand-green focus:ring-green-100" />
+                                <input type="date" x-model="form.slot_date" min="{{ now()->toDateString() }}" class="block w-full rounded-md border-gray-300 focus:border-brand-green focus:ring-green-100" />
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">{{ __('Start Time') }}</label>
@@ -663,6 +665,7 @@
                             <span>{{ __('Generated:') }} <span class="font-semibold" x-text="summary?.generated_count ?? 0"></span></span>
                             <span class="ml-4">{{ __('Skipped by break:') }} <span class="font-semibold" x-text="summary?.skipped_by_break ?? 0"></span></span>
                             <span class="ml-4">{{ __('Skipped by existing conflict:') }} <span class="font-semibold" x-text="summary?.skipped_by_conflict ?? 0"></span></span>
+                            <span class="ml-4">{{ __('Skipped (already passed):') }} <span class="font-semibold" x-text="summary?.skipped_by_past ?? 0"></span></span>
                         </div>
 
                         <div class="mt-4 flex flex-wrap gap-2">

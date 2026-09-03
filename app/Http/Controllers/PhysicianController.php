@@ -1120,6 +1120,11 @@ class PhysicianController extends Controller
         $generatedSlots = [];
         $skippedByBreak = 0;
         $skippedByConflict = 0;
+        // slot_date is validated after_or_equal:today, so this only ever
+        // trims today's already-elapsed slots — a past date never reaches
+        // this method at all.
+        $skippedByPast = 0;
+        $now = CarbonImmutable::now();
 
         for ($cursor = $dayStart; $cursor->lessThan($dayEnd); $cursor = $cursor->addMinutes($durationMinutes)) {
             $slotStart = $cursor;
@@ -1127,6 +1132,11 @@ class PhysicianController extends Controller
 
             if ($slotEnd->greaterThan($dayEnd)) {
                 break;
+            }
+
+            if ($slotStart->lessThanOrEqualTo($now)) {
+                $skippedByPast++;
+                continue;
             }
 
             if ($this->overlapsRange($slotStart, $slotEnd, $breakRange)) {
@@ -1154,6 +1164,7 @@ class PhysicianController extends Controller
                 'generated_count' => count($generatedSlots),
                 'skipped_by_break' => $skippedByBreak,
                 'skipped_by_conflict' => $skippedByConflict,
+                'skipped_by_past' => $skippedByPast,
             ],
         ]);
     }
@@ -1181,10 +1192,21 @@ class PhysicianController extends Controller
 
         $toInsert = [];
         $skippedByConflict = 0;
+        // The preview already excludes elapsed slots (generateScheduleSlots),
+        // but this is the only check a direct POST past that preview can't
+        // bypass — same reasoning as the symptom onset check in
+        // ConsultationController::store.
+        $skippedByPast = 0;
+        $now = CarbonImmutable::now();
 
         foreach ($incomingSlots as $slot) {
             $slotStart = $this->combineDateAndTime(CarbonImmutable::parse($slotDate), $slot['start_time']);
             $slotEnd = $this->combineDateAndTime(CarbonImmutable::parse($slotDate), $slot['end_time']);
+
+            if ($slotStart->lessThanOrEqualTo($now)) {
+                $skippedByPast++;
+                continue;
+            }
 
             if ($this->overlapsExistingSlots($slotStart, $slotEnd, $existingSlots)) {
                 $skippedByConflict++;
@@ -1218,6 +1240,7 @@ class PhysicianController extends Controller
             'summary' => [
                 'saved_count' => count($toInsert),
                 'skipped_by_conflict' => $skippedByConflict,
+                'skipped_by_past' => $skippedByPast,
             ],
             'slots' => $this->getUpcomingSlotsForPhysician($physician->user_id),
         ]);

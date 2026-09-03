@@ -60,10 +60,28 @@
         validationError(message) {
             alert(message);
         },
+        // Mirrors the date input's max attribute and the server-side check in
+        // ConsultationController::store — a symptom's onset can be any time up
+        // to now, never later. Date/time stay optional; an empty date skips
+        // the check entirely.
+        symptomIsInFuture(symptom) {
+            if (!symptom.date) return false;
+            return new Date(`${symptom.date}T${symptom.time || '00:00'}`) > new Date();
+        },
+        firstFutureSymptom() {
+            return this.selectedSymptoms.find(s => this.symptomIsInFuture(s));
+        },
         canAdvanceToStep(step) {
             if (step === 3 && this.selectedSymptoms.length === 0) {
                 this.validationError('Please add at least one symptom before proceeding to additional details.');
                 return false;
+            }
+            if (step === 3) {
+                const futureSymptom = this.firstFutureSymptom();
+                if (futureSymptom) {
+                    this.validationError(`The onset date/time for '${futureSymptom.name}' cannot be in the future.`);
+                    return false;
+                }
             }
             if (step === 4) {
                 const reason = this.$refs.consultationForm.querySelector('[name=&quot;online_reason&quot;]')?.value?.trim() || '';
@@ -85,6 +103,13 @@
             try {
                 if (this.selectedSymptoms.length === 0) {
                     this.validationError('You must provide at least one symptom before submitting your consultation request.');
+                    this.isSubmitting = false;
+                    return;
+                }
+
+                const futureSymptom = this.firstFutureSymptom();
+                if (futureSymptom) {
+                    this.validationError(`The onset date/time for '${futureSymptom.name}' cannot be in the future.`);
                     this.isSubmitting = false;
                     return;
                 }
@@ -413,7 +438,7 @@
                                                         <div class="mt-4 grid gap-3 sm:grid-cols-2">
                                                             <div>
                                                                 <label class="text-xs font-semibold uppercase text-slate-500">Date</label>
-                                                                <input type="date" x-model="selectedSymptoms[index].date" class="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-brand-green focus:outline-none" />
+                                                                <input type="date" x-model="selectedSymptoms[index].date" max="{{ now()->toDateString() }}" class="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-brand-green focus:outline-none" />
                                                             </div>
                                                             <div>
                                                                 <label class="text-xs font-semibold uppercase text-slate-500">Time</label>
