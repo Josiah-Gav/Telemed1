@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\DB;
  *  - 'period': historical metrics scoped by the DateRange's submitted_at
  *    window.
  *  - 'charts': Chart.js-shaped {labels, datasets} series, period-scoped.
- *  - 'symptoms' (admin only): SymptomAnalytics output.
+ *  - 'symptoms' (admin and physician only): SymptomAnalytics output.
  */
 class DashboardAnalyticsService
 {
@@ -81,6 +81,13 @@ class DashboardAnalyticsService
         $completed = (clone $periodQuery())->completed()->count();
         $concluded = (clone $periodQuery())->concluded()->count();
 
+        // Same initial()-only scoping as forAdmin() and for the same reason:
+        // a follow-up copies symptoms_desc verbatim from its parent, so
+        // including it here would double-count that patient's report.
+        $symptomRows = (clone $periodQuery())->initial()->pluck('symptoms_desc');
+        $symptomSummary = $this->symptomAnalytics->summarize($symptomRows);
+        $symptomSummary['standardized'] = array_slice($symptomSummary['standardized'], 0, 10);
+
         return [
             'operational' => [
                 'active_now' => Consultation::forPhysician($physicianId)->active()->count(),
@@ -93,6 +100,7 @@ class DashboardAnalyticsService
                 'completion_rate' => $this->completionRate($completed, $concluded),
             ],
             'charts' => $this->buildCharts($periodQuery, $range),
+            'symptoms' => $symptomSummary,
             'filters' => $this->filtersPayload($range),
         ];
     }

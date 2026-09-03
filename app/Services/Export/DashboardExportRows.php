@@ -195,7 +195,9 @@ class DashboardExportRows
     }
 
     /**
-     * Admin-only. Mirrors SymptomAnalytics::summarize()'s exact output —
+     * Admin and physician only (whichever role's $analytics carries a
+     * 'symptoms' key — see forRole() above). Mirrors SymptomAnalytics::
+     * summarize()'s exact output —
      * including suppressed_terms_count, so the k=3 privacy suppression
      * stays visible in the export rather than silently shrinking a list.
      */

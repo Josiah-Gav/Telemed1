@@ -11,6 +11,33 @@
             && $patient->last_seen_at
             && $patient->last_seen_at->gt(now()->subMinutes(2));
 
+        // Shared by every table's Severity column below and by their sm:hidden
+        // card equivalents, so the desktop row and its mobile card can never
+        // disagree on the highest-severity symptom's colour/label.
+        $symptomSeverity = function ($symptomsData) {
+            $highestSeverity = null;
+
+            if (!empty($symptomsData) && is_array($symptomsData)) {
+                $severityValues = collect($symptomsData)
+                    ->map(fn ($item) => is_array($item) ? ($item['severity'] ?? null) : null)
+                    ->filter(fn ($value) => is_numeric($value))
+                    ->map(fn ($value) => (int) $value)
+                    ->all();
+
+                if (!empty($severityValues)) {
+                    $highestSeverity = max($severityValues);
+                }
+            }
+
+            return match ($highestSeverity) {
+                1 => ['class' => 'bg-green-100 text-green-800', 'label' => __('1 - Very Mild')],
+                2 => ['class' => 'bg-yellow-100 text-yellow-800', 'label' => __('2 - Mild')],
+                3 => ['class' => 'bg-orange-100 text-orange-800', 'label' => __('3 - Moderate')],
+                4 => ['class' => 'bg-red-100 text-red-800', 'label' => __('4 - Severe')],
+                default => ['class' => 'bg-gray-100 text-gray-700', 'label' => __('N/A')],
+            };
+        };
+
         $allInboxRequests = $pendingRequests
             ->concat($assignedToCurrentNurse)
             ->concat($assignedToOtherNurses)
@@ -246,7 +273,48 @@
                         @if($pendingRequests->isEmpty())
                             <x-dash.empty message="No pending consultation requests found." />
                         @else
-                            <div class="overflow-hidden rounded-xl border border-gray-200">
+                            {{-- Below sm the table can only be read by scrolling sideways,
+                                 so each row is repeated as a card. Same data and the same
+                                 action as the table - only the layout differs, and exactly
+                                 one of the two is ever visible. --}}
+                            <div class="space-y-3 sm:hidden">
+                                @foreach($pendingRequests as $request)
+                                    @php($severity = $symptomSeverity($request->symptoms_desc))
+                                    <article class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div class="flex min-w-0 items-center gap-3">
+                                                <div class="relative h-9 w-9 flex-shrink-0">
+                                                    <div class="flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-sm font-semibold text-white">
+                                                        {{ strtoupper(substr(optional($request->patient)->first_name ?? '?', 0, 1)) }}
+                                                    </div>
+                                                    <span class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white {{ $isPatientOnline($request->patient) ? 'bg-emerald-500' : 'bg-gray-300' }}">
+                                                        <span class="sr-only">{{ $isPatientOnline($request->patient) ? __('Online') : __('Offline') }}</span>
+                                                    </span>
+                                                </div>
+                                                <div class="min-w-0">
+                                                    <p class="truncate text-sm font-medium text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</p>
+                                                    <p class="mt-0.5 text-xs text-gray-500">{{ __('Submitted') }} {{ $request->submitted_at ? $request->submitted_at->format('M. j, Y g:i A') : __('Unknown') }}</p>
+                                                </div>
+                                            </div>
+                                            <x-dash.badge :status="$request->request_status" size="sm" />
+                                        </div>
+
+                                        <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                                            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $severity['class'] }}">
+                                                {{ __('Severity') }}: {{ $severity['label'] }}
+                                            </span>
+                                        </div>
+
+                                        <div class="mt-4">
+                                            <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex w-full items-center justify-center rounded-lg bg-brand-green px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-green-deep">
+                                                {{ __('Review') }}
+                                            </button>
+                                        </div>
+                                    </article>
+                                @endforeach
+                            </div>
+
+                            <div class="hidden overflow-hidden rounded-xl border border-gray-200 sm:block">
                                 <div class="overflow-x-auto">
                                     <table class="min-w-full divide-y divide-gray-200">
                                         <thead class="bg-gray-50">
@@ -275,42 +343,9 @@
                                                         </div>
                                                     </td>
                                                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                                                        @php
-                                                            $highestSeverity = null;
-                                                            $severityClass = 'bg-gray-100 text-gray-700';
-                                                            $severityLabel = __('N/A');
-                                                            $symptomsData = $request->symptoms_desc;
-
-                                                            if (!empty($symptomsData) && is_array($symptomsData)) {
-                                                                $severityValues = collect($symptomsData)
-                                                                    ->map(function ($item) {
-                                                                        return is_array($item) ? ($item['severity'] ?? null) : null;
-                                                                    })
-                                                                    ->filter(fn($value) => is_numeric($value))
-                                                                    ->map(fn($value) => (int) $value)
-                                                                    ->all();
-
-                                                                if (!empty($severityValues)) {
-                                                                    $highestSeverity = max($severityValues);
-                                                                }
-                                                            }
-
-                                                            if ($highestSeverity === 1) {
-                                                                $severityClass = 'bg-green-100 text-green-800';
-                                                                $severityLabel = __('1 - Very Mild');
-                                                            } elseif ($highestSeverity === 2) {
-                                                                $severityClass = 'bg-yellow-100 text-yellow-800';
-                                                                $severityLabel = __('2 - Mild');
-                                                            } elseif ($highestSeverity === 3) {
-                                                                $severityClass = 'bg-orange-100 text-orange-800';
-                                                                $severityLabel = __('3 - Moderate');
-                                                            } elseif ($highestSeverity === 4) {
-                                                                $severityClass = 'bg-red-100 text-red-800';
-                                                                $severityLabel = __('4 - Severe');
-                                                            }
-                                                        @endphp
-                                                        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $severityClass }}">
-                                                            {{ $highestSeverity !== null ? $severityLabel : __('N/A') }}
+                                                        @php($severity = $symptomSeverity($request->symptoms_desc))
+                                                        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $severity['class'] }}">
+                                                            {{ $severity['label'] }}
                                                         </span>
                                                     </td>
                                                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{{ $request->submitted_at ? $request->submitted_at->format('M. j, Y g:i A') : __('Unknown') }}</td>
@@ -342,7 +377,49 @@
                                     <x-dash.empty message="No consultations are currently assigned to you." />
                                 </div>
                             @else
-                                <div class="mt-3 overflow-hidden rounded-xl border border-gray-200">
+                                {{-- Below sm the table can only be read by scrolling sideways,
+                                     so each row is repeated as a card. Same data and the same
+                                     two actions as the table - only the layout differs, and
+                                     exactly one of the two is ever visible. --}}
+                                <div class="mt-3 space-y-3 sm:hidden">
+                                    @foreach($assignedToCurrentNurse as $request)
+                                        @php($severity = $symptomSeverity($request->symptoms_desc))
+                                        <article class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                                            <div class="flex items-start justify-between gap-3">
+                                                <div class="flex min-w-0 items-center gap-3">
+                                                    <div class="relative h-9 w-9 flex-shrink-0">
+                                                        <div class="flex h-9 w-9 items-center justify-center rounded-full bg-brand-green text-sm font-semibold text-white">
+                                                            {{ strtoupper(substr(optional($request->patient)->first_name ?? '?', 0, 1)) }}
+                                                        </div>
+                                                        <span class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white {{ $isPatientOnline($request->patient) ? 'bg-emerald-500' : 'bg-gray-300' }}">
+                                                            <span class="sr-only">{{ $isPatientOnline($request->patient) ? __('Online') : __('Offline') }}</span>
+                                                        </span>
+                                                    </div>
+                                                    <div class="min-w-0">
+                                                        <p class="truncate text-sm font-medium text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</p>
+                                                        <p class="mt-0.5 text-xs text-gray-500">{{ __('Submitted') }} {{ $request->submitted_at ? $request->submitted_at->format('M. j, Y g:i A') : __('Unknown') }}</p>
+                                                    </div>
+                                                </div>
+                                                <x-dash.badge :priority="$request->priority_level" size="sm" />
+                                            </div>
+
+                                            <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                                                <x-dash.badge :status="$request->request_status" size="sm" />
+                                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $severity['class'] }}">
+                                                    {{ __('Severity') }}: {{ $severity['label'] }}
+                                                </span>
+                                            </div>
+
+                                            <div class="mt-4">
+                                                <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700">
+                                                    {{ __('Review') }}
+                                                </button>
+                                            </div>
+                                        </article>
+                                    @endforeach
+                                </div>
+
+                                <div class="mt-3 hidden overflow-hidden rounded-xl border border-gray-200 sm:block">
                                     <div class="overflow-x-auto">
                                         <table class="min-w-full divide-y divide-gray-200">
                                             <thead class="bg-gray-50">
@@ -372,42 +449,9 @@
                                                             </div>
                                                         </td>
                                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                                                            @php
-                                                                $highestSeverity = null;
-                                                                $severityClass = 'bg-gray-100 text-gray-700';
-                                                                $severityLabel = __('N/A');
-                                                                $symptomsData = $request->symptoms_desc;
-
-                                                                if (!empty($symptomsData) && is_array($symptomsData)) {
-                                                                    $severityValues = collect($symptomsData)
-                                                                        ->map(function ($item) {
-                                                                            return is_array($item) ? ($item['severity'] ?? null) : null;
-                                                                        })
-                                                                        ->filter(fn($value) => is_numeric($value))
-                                                                        ->map(fn($value) => (int) $value)
-                                                                        ->all();
-
-                                                                    if (!empty($severityValues)) {
-                                                                        $highestSeverity = max($severityValues);
-                                                                    }
-                                                                }
-
-                                                                if ($highestSeverity === 1) {
-                                                                    $severityClass = 'bg-green-100 text-green-800';
-                                                                    $severityLabel = __('1 - Very Mild');
-                                                                } elseif ($highestSeverity === 2) {
-                                                                    $severityClass = 'bg-yellow-100 text-yellow-800';
-                                                                    $severityLabel = __('2 - Mild');
-                                                                } elseif ($highestSeverity === 3) {
-                                                                    $severityClass = 'bg-orange-100 text-orange-800';
-                                                                    $severityLabel = __('3 - Moderate');
-                                                                } elseif ($highestSeverity === 4) {
-                                                                    $severityClass = 'bg-red-100 text-red-800';
-                                                                    $severityLabel = __('4 - Severe');
-                                                                }
-                                                            @endphp
-                                                            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $severityClass }}">
-                                                                {{ $highestSeverity !== null ? $severityLabel : __('N/A') }}
+                                                            @php($severity = $symptomSeverity($request->symptoms_desc))
+                                                            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $severity['class'] }}">
+                                                                {{ $severity['label'] }}
                                                             </span>
                                                         </td>
                                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{{ $request->submitted_at ? $request->submitted_at->format('M. j, Y g:i A') : __('Unknown') }}</td>
@@ -441,7 +485,45 @@
                                     <x-dash.empty message="No consultations are assigned to other nurses right now." />
                                 </div>
                             @else
-                                <div class="mt-3 overflow-hidden rounded-xl border border-gray-200">
+                                {{-- Below sm the table can only be read by scrolling sideways,
+                                     so each row is repeated as a card. Same data and the same
+                                     action as the table - only the layout differs, and exactly
+                                     one of the two is ever visible. --}}
+                                <div class="mt-3 space-y-3 sm:hidden">
+                                    @foreach($assignedToOtherNurses as $request)
+                                        <article class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                                            <div class="flex items-start justify-between gap-3">
+                                                <div class="flex min-w-0 items-center gap-3">
+                                                    <div class="relative h-9 w-9 flex-shrink-0">
+                                                        <div class="flex h-9 w-9 items-center justify-center rounded-full bg-gray-400 text-sm font-semibold text-white">
+                                                            {{ strtoupper(substr(optional($request->patient)->first_name ?? '?', 0, 1)) }}
+                                                        </div>
+                                                        <span class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white {{ $isPatientOnline($request->patient) ? 'bg-emerald-500' : 'bg-gray-300' }}">
+                                                            <span class="sr-only">{{ $isPatientOnline($request->patient) ? __('Online') : __('Offline') }}</span>
+                                                        </span>
+                                                    </div>
+                                                    <div class="min-w-0">
+                                                        <p class="truncate text-sm font-medium text-gray-900">{{ optional($request->patient)->first_name ? optional($request->patient)->first_name . ' ' . optional($request->patient)->last_name : __('Unknown Patient') }}</p>
+                                                        <p class="mt-0.5 text-xs text-gray-500">{{ __('Submitted') }} {{ $request->submitted_at ? $request->submitted_at->format('M. j, Y g:i A') : __('Unknown') }}</p>
+                                                    </div>
+                                                </div>
+                                                <x-dash.badge :status="$request->request_status" size="sm" />
+                                            </div>
+
+                                            <p class="mt-3 text-xs text-gray-500">
+                                                {{ __('Assigned Nurse') }}: {{ trim(optional($request->nurse)->first_name . ' ' . optional($request->nurse)->last_name) ?: __('Unassigned') }}
+                                            </p>
+
+                                            <div class="mt-4">
+                                                <button type="button" @click="openModal({{ $request->request_id }})" class="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700">
+                                                    {{ __('Review') }}
+                                                </button>
+                                            </div>
+                                        </article>
+                                    @endforeach
+                                </div>
+
+                                <div class="mt-3 hidden overflow-hidden rounded-xl border border-gray-200 sm:block">
                                     <div class="overflow-x-auto">
                                         <table class="min-w-full divide-y divide-gray-200">
                                             <thead class="bg-gray-50">

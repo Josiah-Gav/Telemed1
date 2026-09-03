@@ -167,6 +167,29 @@
                 </div>
             </x-dash.section>
 
+            {{-- ================= BAND 5 — SYMPTOM ANALYTICS (date-filtered, own patients only) ================= --}}
+            @php
+                $symptoms = $analytics['symptoms'];
+                $standardizedLabels = array_column($symptoms['standardized'], 'name');
+                $standardizedCounts = array_column($symptoms['standardized'], 'count');
+            @endphp
+            <x-dash.section
+                id="physician-symptom-analytics"
+                title="What My Patients Are Reporting"
+                description="Based on initial requests only. Follow-up consultations repeat the original request's symptoms, so including them would count the same report more than once."
+            >
+                <x-dash.chart
+                    chart-id="physician-symptoms-chart"
+                    type="hbar"
+                    title="Most reported symptoms"
+                    :labels="$standardizedLabels"
+                    :datasets="[['label' => 'Requests', 'data' => $standardizedCounts]]"
+                    :summary="'Horizontal bar chart of the top standardized symptoms across ' . $symptoms['valid_requests'] . ' of my requests with recorded symptoms'"
+                    empty-message="No symptom data recorded for this period."
+                    :footnote="'Out of ' . $symptoms['valid_requests'] . ' of my initial requests with at least one recorded symptom.'"
+                />
+            </x-dash.section>
+
         </div>
     </div>
 </x-app-layout>
